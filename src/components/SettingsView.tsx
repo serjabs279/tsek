@@ -16,7 +16,7 @@ import {
 import type { AppState, DepedPolicy, PaperOrientation, PaperSize, SheetsPerPage } from '../types';
 import { useApp } from '../store/AppStore';
 import { validateImportedState } from '../lib/storage';
-import { SNAPSHOT_LABELS, workspaceStorage, type SnapshotMeta } from '../lib/workspaceStorage';
+import { SNAPSHOT_LABELS, workspaceFilePath, workspaceStorage, type SnapshotMeta } from '../lib/workspaceStorage';
 import { readFileAsText } from '../lib/download';
 import { downloadWorkspace } from '../lib/exports';
 import { seedState } from '../lib/grading';
@@ -44,7 +44,18 @@ export function SettingsView() {
   const [testing, setTesting] = useState(false);
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [pendingSnapshot, setPendingSnapshot] = useState<SnapshotMeta | null>(null);
+  const [workspaceFile, setWorkspaceFile] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void workspaceFilePath().then((path) => {
+      if (alive) setWorkspaceFile(path);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const refreshSnapshots = useCallback(async () => {
     setSnapshots(await workspaceStorage.listSnapshots());
@@ -268,6 +279,11 @@ export function SettingsView() {
               <div className="readiness-row"><span><CheckCircle2 size={15} /> Checked sheets</span><strong>{state.results.length}</strong></div>
               <div className="readiness-row"><span><FileJson size={15} /> Stored size</span><strong>{payloadSize}</strong></div>
             </div>
+            {workspaceFile && (
+              <p className="tiny faint" style={{ marginTop: 10, wordBreak: 'break-all' }}>
+                Saved as <strong>workspace.json</strong> — {workspaceFile}
+              </p>
+            )}
             <div className="mini-list" style={{ marginTop: 14 }}>
               <button className="btn btn--soft btn--block" onClick={() => downloadWorkspace(state)}>
                 <Download size={15} /> Download workspace backup

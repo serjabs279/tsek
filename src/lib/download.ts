@@ -1,3 +1,6 @@
+import { invoke } from '@tauri-apps/api/core';
+import { isDesktop } from './desktop';
+
 export function safeFilename(value: string): string {
   return value
     .replace(/[\\/:*?"<>|]+/g, '')
@@ -6,7 +9,25 @@ export function safeFilename(value: string): string {
     .replace(/^_|_$/g, '');
 }
 
+/**
+ * A browser download would land in the webview's own folder, which is not
+ * somewhere a teacher can find a sheet PDF. Inside the desktop shell the file
+ * goes through a normal Windows save dialog instead.
+ */
+async function saveWithDialog(blob: Blob, filename: string): Promise<void> {
+  try {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    await invoke<string | null>('save_export', { filename, bytes: Array.from(bytes) });
+  } catch (error) {
+    console.error('[Tsek] The file could not be saved', error);
+  }
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
+  if (isDesktop) {
+    void saveWithDialog(blob, filename);
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

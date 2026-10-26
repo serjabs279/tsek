@@ -17,10 +17,40 @@ Developed by **ZX TechLabs** · Developer: Richmond C. Jabla
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:5173 (browser)
 npm run build    # production build into dist/
 npm run preview  # serve the production build
 ```
+
+## Desktop app
+
+`src-tauri/` wraps the same build in a Tauri 2 shell. The webview is the UI;
+the Rust side owns the files.
+
+```bash
+npm run desktop        # tauri dev against localhost:5173
+npm run desktop:build  # release .exe + NSIS installer
+```
+
+Outputs land in `src-tauri/target/release/`: `tsek.exe` and
+`bundle/nsis/Tsek_0.1.0_x64-setup.exe`.
+
+What changes in the desktop build:
+
+- The workspace is a real file, `workspace.json`, in the app data folder
+  (`%APPDATA%\ph.zxtechlabs.tsek\`), with snapshots as individual files in
+  `snapshots\`. Settings shows the exact path. A cache clear cannot wipe it, and
+  the folder can be copied to another machine.
+- Downloads go through a Windows save dialog, so sheet PDFs and result JSON land
+  wherever you choose instead of inside the webview.
+- A fresh install opens empty — no sample learners. **Explore the demo** on the
+  home screen fills in a practice class if you want one.
+- Browser data does not migrate by itself: use **Download workspace backup** in
+  Settings on the web version, then **Restore from backup** in the desktop app.
+- The app still runs fully offline. The installer needs WebView2, which is
+  preinstalled on current Windows 10 and 11.
+- Builds are unsigned, so SmartScreen shows "Windows protected your PC" on first
+  launch until the binary is code-signed. Choose **More info → Run anyway**.
 
 ## How a class flows
 

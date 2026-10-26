@@ -28,20 +28,24 @@ export function createEmptyState(): AppState {
   };
 }
 
+/** Fill in anything a saved or imported file is missing, and drop junk. */
+export function normalizeState(parsed: AppState | null | undefined): AppState | null {
+  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.exams)) return null;
+  return {
+    ...createEmptyState(),
+    ...parsed,
+    settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+    exams: parsed.exams.map(normalizeExam),
+    learners: Array.isArray(parsed.learners) ? parsed.learners : [],
+    results: Array.isArray(parsed.results) ? parsed.results : [],
+  };
+}
+
 export function loadState(): AppState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as AppState;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.exams)) return null;
-    return {
-      ...createEmptyState(),
-      ...parsed,
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
-      exams: parsed.exams.map(normalizeExam),
-      learners: Array.isArray(parsed.learners) ? parsed.learners : [],
-      results: Array.isArray(parsed.results) ? parsed.results : [],
-    };
+    return normalizeState(JSON.parse(raw) as AppState);
   } catch (error) {
     console.error('[Tsek] Could not read saved workspace', error);
     return null;
