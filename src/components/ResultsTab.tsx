@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckCircle2,
   Download,
+  FileDown,
   FileJson,
   FileText,
   PenLine,
@@ -17,6 +18,8 @@ import { analyzeItems, rateTone, recalculateResult, summarize } from '../lib/res
 import { manualSlots, materializeItems } from '../lib/sections';
 import { scoreResult } from '../lib/scoring';
 import { downloadResultsArchive, downloadResultsCsv } from '../lib/exports';
+import { downloadBlob } from '../lib/download';
+import { buildResultsPdf, reportFilename } from '../lib/reportPdf';
 import { Badge, ConfirmDialog, EmptyState, Modal, Segmented, StatCard } from './ui';
 import type { WorkspaceTab } from './ExamWorkspace';
 
@@ -109,6 +112,21 @@ export function ResultsTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab:
             )}
             <button className="btn btn--ghost btn--sm" onClick={() => { downloadResultsCsv(state, exam); toast('Results CSV downloaded.', 'success'); }}>
               <Download size={14} /> CSV
+            </button>
+            <button
+              className="btn btn--soft btn--sm"
+              disabled={results.length === 0}
+              onClick={async () => {
+                try {
+                  const bytes = await buildResultsPdf(exam, learners, results, state.settings);
+                  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), reportFilename('Results', exam));
+                  toast('Results PDF downloaded.', 'success');
+                } catch (error) {
+                  toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+                }
+              }}
+            >
+              <FileDown size={14} /> PDF
             </button>
             <button className="btn btn--soft btn--sm" onClick={() => { downloadResultsArchive(state, exam); toast('Results JSON downloaded.', 'success'); }}>
               <FileJson size={14} /> JSON

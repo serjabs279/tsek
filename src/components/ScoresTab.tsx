@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Eraser, PenLine, ScanLine } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Eraser, FileDown, PenLine, ScanLine } from 'lucide-react';
 import type { Exam, ScanResult } from '../types';
 import { useApp } from '../store/AppStore';
+import { downloadBlob } from '../lib/download';
+import { buildScoresPdf, reportFilename } from '../lib/reportPdf';
 import { examSections, isPartScored, manualItems, partScoreKey, type MaterialItem } from '../lib/sections';
 import { scoreResult } from '../lib/scoring';
 import { summarize } from '../lib/results';
@@ -137,8 +139,7 @@ function ScoreCell({
 }
 
 export function ScoresTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: WorkspaceTab) => void }) {
-  const { state, updateResult, toast } = useApp();
-  const learners = state.learners.filter((learner) => learner.examId === exam.id);
+  const { state, updateResult, toast } = useApp();  const learners = state.learners.filter((learner) => learner.examId === exam.id);
   const written = useMemo(() => manualItems(exam), [exam]);
   const pooledSections = useMemo(
     () => new Set(examSections(exam).filter(isPartScored).map((section) => section.id)),
@@ -181,6 +182,20 @@ export function ScoresTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
 
   const [confirmZero, setConfirmZero] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  const exportPdf = async () => {
+    if (results.length === 0) {
+      toast('Scan at least one sheet before downloading the score matrix.', 'danger');
+      return;
+    }
+    try {
+      const bytes = await buildScoresPdf(exam, learners, results, state.settings);
+      downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), reportFilename('Scores', exam));
+      toast('Score matrix PDF downloaded.', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+    }
+  };
 
   const writtenPoints = round2(scoreColumns.reduce((sum, column) => sum + column.max, 0));
   const scoredLearners = results.filter((result) => {
@@ -258,6 +273,9 @@ export function ScoresTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
           <div className="row" style={{ gap: 6 }}>
             <Badge tone="neutral"><PenLine size={12} /> {written.length} items</Badge>
             <Badge tone="accent">{points(writtenPoints)} pts possible</Badge>
+            <button className="btn btn--soft btn--sm" onClick={() => void exportPdf()} disabled={results.length === 0}>
+              <FileDown size={14} /> PDF
+            </button>
           </div>
         </div>
         <div className="card-body">

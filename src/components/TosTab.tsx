@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Download,
+  FileDown,
   Info,
   Plus,
   Printer,
@@ -14,8 +15,9 @@ import {
 import { BLOOM_LEVELS } from '../types';
 import type { BloomLevel, Exam, TosPlan, TosRow } from '../types';
 import { useApp } from '../store/AppStore';
-import { downloadText, safeFilename } from '../lib/download';
+import { downloadBlob, downloadText, safeFilename } from '../lib/download';
 import { printHtml } from '../lib/print';
+import { buildTosPdf, reportFilename } from '../lib/reportPdf';
 import {
   DEFAULT_BLOOM_WEIGHTS,
   buildTosCsv,
@@ -109,6 +111,20 @@ export function TosTab({ exam }: { exam: Exam }) {
     toast('TOS CSV downloaded. It opens directly in Excel or Google Sheets.', 'success');
   };
 
+  const exportPdf = async () => {
+    if (plan.rows.length === 0) {
+      toast('Add at least one topic before exporting.', 'danger');
+      return;
+    }
+    try {
+      const bytes = await buildTosPdf(plan, exam, state.settings);
+      downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), reportFilename('TOS', exam));
+      toast('TOS PDF downloaded.', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+    }
+  };
+
   return (
     <div className="stack">
       <section className="card">
@@ -188,6 +204,9 @@ export function TosTab({ exam }: { exam: Exam }) {
               </button>
               <button className="btn btn--soft btn--sm" onClick={exportCsv}>
                 <Download size={14} /> CSV
+              </button>
+              <button className="btn btn--soft btn--sm" onClick={() => void exportPdf()}>
+                <FileDown size={14} /> PDF
               </button>
               <button className="btn btn--soft btn--sm" onClick={printTos}>
                 <Printer size={14} /> Print TOS

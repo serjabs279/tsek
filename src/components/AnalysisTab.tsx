@@ -4,6 +4,7 @@ import {
   BarChart3,
   CheckCircle2,
   Download,
+  FileDown,
   Info,
   Printer,
   RotateCcw,
@@ -13,8 +14,9 @@ import {
 import type { AnalysisThresholds, Exam } from '../types';
 import { SECTION_LABELS } from '../types';
 import { useApp } from '../store/AppStore';
-import { downloadText, safeFilename } from '../lib/download';
+import { downloadBlob, downloadText, safeFilename } from '../lib/download';
 import { printHtml } from '../lib/print';
+import { buildItemAnalysisPdf, reportFilename } from '../lib/reportPdf';
 import {
   DEFAULT_ANALYSIS_THRESHOLDS,
   buildAnalysisCsv,
@@ -79,6 +81,20 @@ export function AnalysisTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab
       return;
     }
     printHtml(buildAnalysisPrintHtml(exam, report, state.settings, thresholds));
+  };
+
+  const exportPdf = async () => {
+    if (report.takers === 0) {
+      toast('Check at least one answer sheet before exporting.', 'danger');
+      return;
+    }
+    try {
+      const bytes = await buildItemAnalysisPdf(exam, report, state.settings, thresholds);
+      downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), reportFilename('ItemAnalysis', exam));
+      toast('Item analysis PDF downloaded. Landscape, sized to your paper setting.', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+    }
   };
 
   const exportCsv = () => {
@@ -173,6 +189,9 @@ export function AnalysisTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab
           <div className="row row--wrap" style={{ gap: 6 }}>
             <button className="btn btn--soft btn--sm" onClick={exportCsv}>
               <Download size={14} /> CSV
+            </button>
+            <button className="btn btn--soft btn--sm" onClick={() => void exportPdf()}>
+              <FileDown size={14} /> PDF
             </button>
             <button className="btn btn--primary btn--sm" onClick={printReport}>
               <Printer size={14} /> Print report

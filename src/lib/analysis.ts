@@ -738,7 +738,7 @@ export function buildAnalysisPrintHtml(
 <meta charset="utf-8" />
 <title>${escapeHtml(`Item analysis ${exam.title}`)}</title>
 <style>
-  @page { size: letter portrait; margin: 0.42in; }
+  @page { size: letter landscape; margin: 0.4in; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: 'Times New Roman', Georgia, serif; color: #111; font-size: 8.6pt; }
   .republic { text-align: center; line-height: 1.25; }
@@ -757,7 +757,7 @@ export function buildAnalysisPrintHtml(
   .summary th { background: #eee; text-align: left; }
   .col { flex: 1; }
   table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 2px; }
-  table.items th, table.items td { border: 1.2px solid #555; padding: 2.4px 3px; font-size: 7.4pt; }
+  table.items th, table.items td { border: 1.2px solid #555; padding: 2.4px 3px; font-size: 7.4pt; overflow-wrap: anywhere; word-break: break-word; }
   table.items th { background: #eee; font-size: 6.8pt; text-transform: uppercase; letter-spacing: 0.02em; border-width: 1.5px; }
   table.items tr { page-break-inside: avoid; }
   .num { text-align: center; font-variant-numeric: tabular-nums; }
