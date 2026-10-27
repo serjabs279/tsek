@@ -24,6 +24,9 @@ const MUTED = rgb(0.35, 0.33, 0.29);
 const LINE = rgb(0.45, 0.42, 0.38);
 const HEAD_BG = rgb(0.9, 0.885, 0.86);
 const ZEBRA = rgb(0.965, 0.958, 0.945);
+const TONE_KEY = rgb(0.43, 0.22, 0.13);
+const TONE_DEFECT = rgb(0.55, 0.13, 0.13);
+const TONE_REJECT = rgb(0.45, 0.36, 0.05);
 
 interface Col {
   header: string;
@@ -34,9 +37,18 @@ interface Col {
 }
 
 interface Cell {
-  text: string;
+  text?: string;
   bold?: boolean;
   color?: ReturnType<typeof rgb>;
+  /** Rendered as small bordered pill boxes, e.g. one per distractor. */
+  pills?: Pill[];
+}
+
+interface Pill {
+  text: string;
+  bold?: boolean;
+  /** Pill border and text color. */
+  tone?: ReturnType<typeof rgb>;
 }
 
 const cell = (text: string, extra: Partial<Cell> = {}): Cell => ({ text, ...extra });
@@ -160,21 +172,21 @@ class ReportWriter {
 
   /** A lettered section heading with a rule under it. */
   heading(title: string): void {
-    this.ensure(24);
-    this.y -= 10;
-    this.text(title.toUpperCase(), this.margin, this.y, { font: this.bold, size: 8.5 });
-    this.y -= 3.5;
+    this.ensure(26);
+    this.y -= 12;
+    this.text(title.toUpperCase(), this.margin, this.y, { font: this.bold, size: 9.5 });
+    this.y -= 4;
     this.page.drawLine({
       start: { x: this.margin, y: this.y },
       end: { x: this.width - this.margin, y: this.y },
-      thickness: 1.1,
+      thickness: 1.3,
       color: LINE,
     });
-    this.y -= 4;
+    this.y -= 5;
   }
 
   /** Wrapped paragraph, e.g. legends and notes. */
-  paragraph(text: string, size = 7, color = MUTED): void {
+  paragraph(text: string, size = 7.6, color = MUTED): void {
     const lines = wrapText(this.regular, text, size, this.usableWidth);
     for (const line of lines) {
       this.ensure(size + 3);
@@ -186,14 +198,36 @@ class ReportWriter {
   /**
    * The heart of the engine: a full-width table. Every cell is word-wrapped to
    * its column, the row grows to fit the tallest cell, and the header repeats
-   * whenever the table continues on a new page.
+   * whenever the table continues on a new page. A cell may instead carry
+   * pills, which are laid out like words and wrapped onto pill rows.
    */
   table(cols: Col[], rows: Cell[][], options: { bodySize?: number; pad?: number; zebra?: boolean } = {}): void {
-    const bodySize = options.bodySize ?? 7.4;
-    const pad = options.pad ?? 2.6;
+    const bodySize = options.bodySize ?? 8.4;
+    const pad = options.pad ?? 3.2;
+    const pillHeight = bodySize + 6.4;
     const totalWeight = cols.reduce((sum, col) => sum + col.w, 0);
     const widths = cols.map((col) => (this.usableWidth * col.w) / totalWeight);
-    const headSize = Math.min(...cols.map((col) => col.size ?? bodySize)) - 0.6;
+    const headSize = Math.min(...cols.map((col) => col.size ?? bodySize)) - 0.8;
+
+    // Pills flow like words: fill the row, wrap when the next one spills over.
+    const layoutPills = (pills: Pill[], maxWidth: number) => {
+      const gap = 3.5;
+      const laid: { pill: Pill; x: number; w: number }[][] = [];
+      let row: { pill: Pill; x: number; w: number }[] = [];
+      let x = 0;
+      pills.forEach((pill) => {
+        const w = (pill.bold ? this.bold : this.regular).widthOfTextAtSize(pill.text, bodySize - 0.6) + 9;
+        if (row.length && x + w > maxWidth) {
+          laid.push(row);
+          row = [];
+          x = 0;
+        }
+        row.push({ pill, x, w });
+        x += w + gap;
+      });
+      if (row.length) laid.push(row);
+      return laid;
+    };
 
     const drawHeader = () => {
       // Header cells wrap too, so long names like "Discrimination" never
@@ -201,7 +235,7 @@ class ReportWriter {
       const headLines = cols.map((col, index) =>
         wrapText(this.bold, col.header, headSize, widths[index] - pad * 2)
       );
-      const rowHeight = Math.max(...headLines.map((lines) => lines.length)) * (headSize + 1.4) + pad * 2;
+      const rowHeight = Math.max(...headLines.map((lines) => lines.length)) * (headSize + 1.6) + pad * 2.4;
       this.ensure(rowHeight);
       this.page.drawRectangle({
         x: this.margin,
@@ -210,16 +244,16 @@ class ReportWriter {
         height: rowHeight,
         color: HEAD_BG,
         borderColor: LINE,
-        borderWidth: 1,
+        borderWidth: 1.2,
       });
       let x = this.margin;
       headLines.forEach((lines, index) => {
         const col = cols[index];
-        const baseY = this.y - pad - headSize;
+        const baseY = this.y - pad * 1.2 - headSize;
         lines.forEach((line, lineIndex) => {
           const w = this.bold.widthOfTextAtSize(line, headSize);
           const offset = col.align === 'left' ? 0 : Math.max(0, (widths[index] - w) / 2 - 0.5);
-          this.text(line, x + pad + offset, baseY - lineIndex * (headSize + 1.4), {
+          this.text(line, x + pad + offset, baseY - lineIndex * (headSize + 1.6), {
             font: this.bold,
             size: headSize,
           });
@@ -232,11 +266,18 @@ class ReportWriter {
     drawHeader();
 
     rows.forEach((row, rowIndex) => {
-      const wrapped = row.map((value, index) =>
-        wrapText((value.bold ? this.bold : this.regular), value.text, bodySize, widths[index] - pad * 2)
-      );
-      const rowHeight = Math.max(...wrapped.map((lines) => lines.length)) * (bodySize + 1.6) + pad * 2;
-      if (this.y - rowHeight < this.margin + 16) {
+      type Content = { lines?: string[]; pillRows?: { pill: Pill; x: number; w: number }[][]; height: number };
+      const content: Content[] = row.map((value, index) => {
+        const inner = widths[index] - pad * 2;
+        if (value.pills && value.pills.length > 0) {
+          const pillRows = layoutPills(value.pills, inner);
+          return { pillRows, height: pillRows.length * (pillHeight + 3) - 3 };
+        }
+        const lines = wrapText((value.bold ? this.bold : this.regular), value.text ?? '', bodySize, inner);
+        return { lines, height: lines.length * (bodySize + 2) - 2 };
+      });
+      const rowHeight = Math.max(...content.map((piece) => piece.height)) + pad * 2.2;
+      if (this.y - rowHeight < this.margin + 18) {
         this.newPage();
         drawHeader();
       }
@@ -256,24 +297,50 @@ class ReportWriter {
         width: this.usableWidth,
         height: rowHeight,
         borderColor: LINE,
-        borderWidth: 1,
+        borderWidth: 1.1,
       });
       let x = this.margin;
-      wrapped.forEach((lines, index) => {
+      content.forEach((piece, index) => {
         const value = row[index];
         const col = cols[index];
-        const baseY = this.y - pad - bodySize;
-        lines.forEach((line, lineIndex) => {
-          const w = (value.bold ? this.bold : this.regular).widthOfTextAtSize(line, bodySize);
-          let offset = 0;
-          if (col.align === 'center') offset = Math.max(0, (widths[index] - w) / 2 - 0.5);
-          else if (col.align === 'right') offset = Math.max(0, widths[index] - w - pad * 2);
-          this.text(line, x + pad + offset, baseY - lineIndex * (bodySize + 1.6), {
-            font: value.bold ? this.bold : this.regular,
-            size: bodySize,
-            color: value.color,
+        if (piece.pillRows) {
+          piece.pillRows.forEach((pillRow, rowIndex2) => {
+            const top = this.y - pad * 1.1 - rowIndex2 * (pillHeight + 3);
+            pillRow.forEach(({ pill, x: px, w }) => {
+              const size = bodySize - 0.6;
+              this.page.drawRectangle({
+                x: x + pad + px,
+                y: top - pillHeight,
+                width: w,
+                height: pillHeight,
+                color: pill.bold ? rgb(0.965, 0.925, 0.885) : ZEBRA,
+                borderColor: pill.tone ?? LINE,
+                borderWidth: pill.tone ? 1.2 : 0.9,
+              });
+              const font = pill.bold ? this.bold : this.regular;
+              const tw = font.widthOfTextAtSize(pill.text, size);
+              this.text(pill.text, x + pad + px + (w - tw) / 2, top - pillHeight / 2 - size / 2 + 1, {
+                font,
+                size,
+                color: pill.tone ?? INK,
+              });
+            });
           });
-        });
+        } else {
+          const lines = piece.lines ?? [];
+          const baseY = this.y - pad * 1.1 - bodySize;
+          lines.forEach((line, lineIndex) => {
+            const w = (value.bold ? this.bold : this.regular).widthOfTextAtSize(line, bodySize);
+            let offset = 0;
+            if (col.align === 'center') offset = Math.max(0, (widths[index] - w) / 2 - 0.5);
+            else if (col.align === 'right') offset = Math.max(0, widths[index] - w - pad * 2);
+            this.text(line, x + pad + offset, baseY - lineIndex * (bodySize + 2), {
+              font: value.bold ? this.bold : this.regular,
+              size: bodySize,
+              color: value.color,
+            });
+          });
+        }
         x += widths[index];
       });
       this.y -= rowHeight;
@@ -296,21 +363,21 @@ class ReportWriter {
       const w = font.widthOfTextAtSize(value, size);
       this.text(value, (this.width - w) / 2, this.y, { size, font, color });
     };
-    this.y -= 8.5;
-    center('Republic of the Philippines', 8);
-    this.y -= 9.6;
-    center('Department of Education', 8, this.bold);
-    this.y -= 9.6;
-    center(`Region ${settings.region || '—'}  ·  Division of ${settings.division || '—'}`, 7.6, this.regular, MUTED);
-    this.y -= 10.4;
-    center(settings.schoolName || '—', 9.5, this.bold);
-    this.y -= 13;
+    this.y -= 9;
+    center('Republic of the Philippines', 8.5);
+    this.y -= 10.2;
+    center('Department of Education', 8.5, this.bold);
+    this.y -= 10.2;
+    center(`Region ${settings.region || '—'}  ·  Division of ${settings.division || '—'}`, 8, this.regular, MUTED);
+    this.y -= 11.2;
+    center(settings.schoolName || '—', 10.5, this.bold);
+    this.y -= 14;
   }
 
   title(value: string): void {
-    const size = 12;
+    const size = 13.5;
     const w = this.bold.widthOfTextAtSize(value, size);
-    this.y -= size + 2;
+    this.y -= size + 2.5;
     this.text(value, (this.width - w) / 2, this.y, { size, font: this.bold });
     this.y -= 2;
   }
@@ -420,36 +487,39 @@ export async function buildItemAnalysisPdf(
         ),
       ],
     ],
-    { bodySize: 7.4 }
+    { bodySize: 8.4 }
   );
 
   writer.heading('Per-item results');
   const itemCols: Col[] = [
-    { header: 'Item', w: 4.5, align: 'center' },
-    { header: 'Part', w: 10, align: 'left' },
-    { header: 'Key', w: 4, align: 'center' },
-    { header: 'High', w: 4.5, align: 'center' },
-    { header: 'Low', w: 4.5, align: 'center' },
-    { header: 'Diff.', w: 4.5, align: 'center' },
-    { header: 'Difficulty', w: 8, align: 'center' },
-    { header: 'Disc.', w: 4.5, align: 'center' },
-    { header: 'Discrimination', w: 9, align: 'center' },
-    { header: 'Recommendation', w: 10.5, align: 'center' },
-    { header: 'Distractors / written detail', w: 36, align: 'left' },
+    { header: 'Item no.', w: 5, align: 'center' },
+    { header: 'Part', w: 9, align: 'left' },
+    { header: 'Key', w: 4.5, align: 'center' },
+    { header: 'High group', w: 5.5, align: 'center' },
+    { header: 'Low group', w: 5.5, align: 'center' },
+    { header: 'Difficulty index', w: 6.5, align: 'center' },
+    { header: 'Difficulty band', w: 8.5, align: 'center' },
+    { header: 'Discrimination index', w: 7, align: 'center' },
+    { header: 'Discrimination band', w: 9, align: 'center' },
+    { header: 'Recommendation', w: 9.5, align: 'center' },
+    { header: 'Distractors / written detail', w: 30, align: 'left' },
   ];
   const itemRows = report.items.map((item) => {
     const itemLabel = item.endItem > item.item ? `${item.item}–${item.endItem}` : String(item.item);
-    const detail = item.scannable
-      ? item.choices
-          .map(
-            (choice) =>
-              `${choice.choice} ${choice.high}/${choice.low}${choice.isKey ? '*' : choice.status === 'D' ? ' D' : choice.status === 'R' ? ' R' : ''}`
-          )
-          .join('  ')
-      : `${item.part ? 'Whole part' : 'Written'} · mean ${fmt(item.meanEarned)} / ${fmt(item.points)} pts · ${item.scoredCount} scored`;
+    const detail: Cell = item.scannable
+      ? {
+          pills: item.choices.map((choice) => ({
+            text: `${choice.choice} ${choice.high}/${choice.low}${choice.isKey ? ' · key' : choice.status === 'D' ? ' · defect' : choice.status === 'R' ? ' · rejected' : ''}`,
+            bold: choice.isKey,
+            tone: choice.isKey ? TONE_KEY : choice.status === 'D' ? TONE_DEFECT : choice.status === 'R' ? TONE_REJECT : undefined,
+          })),
+        }
+      : cell(
+          `${item.part ? 'Whole written part' : 'Written item'} — mean ${fmt(item.meanEarned)} of ${fmt(item.points)} pts · ${item.scoredCount} scored`
+        );
     return [
       cell(itemLabel),
-      cell(`${item.sectionTitle}${item.part ? ' (pooled)' : ''}`),
+      cell(`${item.sectionTitle}${item.part ? ' (pooled part)' : ''}`),
       cell(item.key || '—'),
       cell(item.scannable ? String(item.highCorrect) : fmt(item.highMean)),
       cell(item.scannable ? String(item.lowCorrect) : fmt(item.lowMean)),
@@ -458,17 +528,16 @@ export async function buildItemAnalysisPdf(
       cell(item.discrimination === null ? '—' : item.discrimination.toFixed(2)),
       cell(item.discriminationBand),
       cell(item.recommendation, { bold: item.recommendation === 'Accept' }),
-      cell(detail),
+      detail,
     ];
   });
-  writer.table(itemCols, itemRows, { bodySize: 7, zebra: true });
+  writer.table(itemCols, itemRows, { zebra: true });
   writer.paragraph(
     `Difficulty: above ${thresholds.easyAbove.toFixed(2)} = Easy · below ${thresholds.hardBelow.toFixed(2)} = Hard · otherwise Average. ` +
       `Discrimination: above ${thresholds.discriminatingAbove.toFixed(2)} = Discriminating · below ${thresholds.notDiscriminatingBelow.toFixed(3)} = Not Discriminating. ` +
-      `Distractors: OK = chosen more by the low group · D = defective (chosen more by the high group) · R = rejected (chosen by nobody). ` +
-      `An asterisk (*) after a choice marks the key. High/Low are counts for scanned items and mean points for written items. ` +
-      `KR-20 and KR-21 use scanned items only; Cronbach's alpha covers every scored row.`,
-    6.8
+      `In the distractor pills, the shaded box marks the key; a red border means the distractor is defective (chosen more by the high group) and an olive border means it was rejected (chosen by nobody). ` +
+      `High and Low are counts for scanned items and mean points for written items. ` +
+      `KR-20 and KR-21 use scanned items only; Cronbach's alpha covers every scored row.`
   );
 
   const groupTable = (title: string, group: { name: string; score: number; possible: number; percentage: number }[]) => {
@@ -486,7 +555,7 @@ export async function buildItemAnalysisPdf(
         cell(`${fmt(student.score)} / ${fmt(student.possible, 0)}`),
         cell(`${student.percentage.toFixed(1)}%`),
       ]),
-      { bodySize: 7.4 }
+      { bodySize: 8.4 }
     );
   };
   groupTable('High group', report.highGroup);
@@ -522,14 +591,14 @@ export async function buildTosPdf(plan: TosPlan, exam: Exam, settings: AppSettin
 
   const cols: Col[] = [
     { header: '#', w: 3, align: 'center' },
-    { header: 'Topic', w: 13, align: 'left' },
-    { header: 'Competencies', w: 21, align: 'left' },
+    { header: 'Topic', w: 12, align: 'left' },
+    { header: 'Competencies', w: 17, align: 'left' },
     { header: 'Time', w: 4, align: 'center' },
     { header: 'Weight %', w: 5, align: 'center' },
   ];
   BLOOM_LEVELS.forEach((level: BloomLevel) => {
-    cols.push({ header: `${level} · NOI`, w: 4.2, align: 'center' });
-    cols.push({ header: 'POI', w: 5.6, align: 'center', size: 6.6 });
+    cols.push({ header: `${level} · NOI`, w: 6.2, align: 'center', size: 6.6 });
+    cols.push({ header: 'POI', w: 4.6, align: 'center', size: 6.6 });
   });
   cols.push({ header: 'Total items', w: 4.5, align: 'center' });
   cols.push({ header: 'Type of test', w: 8, align: 'center' });
@@ -557,7 +626,7 @@ export async function buildTosPdf(plan: TosPlan, exam: Exam, settings: AppSettin
   });
   totalRow.push(cell(String(totals.allocated), { bold: true }));
   totalRow.push(cell(''));
-  writer.table(cols, [...rows, totalRow], { bodySize: 7, zebra: true });
+  writer.table(cols, [...rows, totalRow], { bodySize: 7.4, pad: 2.6, zebra: true });
 
   writer.paragraph(
     'NOI = number of items · POI = placement of items. Weight comes from the time spent per topic. Placements follow the table order.',
@@ -687,7 +756,7 @@ export async function buildScoresPdf(
     6.8
   );
   writer.y -= 2;
-  writer.table(cols, rows, { bodySize: 6.9, pad: 2, zebra: true });
+  writer.table(cols, rows, { bodySize: 7.6, pad: 2.6, zebra: true });
   writer.finish(`Score matrix · ${exam.title}`);
   return writer.pdf.save();
 }
@@ -767,7 +836,7 @@ export async function buildResultsPdf(
         cell(notes.join(' · ') || '', { color: notes.length ? MUTED : INK }),
       ];
     }),
-    { bodySize: 7.2, zebra: true }
+    { bodySize: 8, zebra: true }
   );
   writer.signatureBlock(exam.teacherName || '', 'Prepared by', 'Checked by / School Head');
   writer.finish(`Results · ${exam.title}`);
