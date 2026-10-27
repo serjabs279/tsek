@@ -141,6 +141,42 @@ export function discriminationBand(value: number | null, thresholds: AnalysisThr
   return 'Average';
 }
 
+/**
+ * Plain-language reason for an item's recommendation. This inverts the same
+ * fixed rule matrix that produced the verdict in `recommend()`, so every
+ * explanation is deterministic — no AI involved.
+ */
+export function explainRecommendation(item: ItemStat): string {
+  const d = item.difficultyBand;
+  const s = item.discriminationBand;
+  if (item.recommendation === '—' || d === '—' || s === '—') return '';
+  const pct = item.difficulty === null || !Number.isFinite(item.difficulty)
+    ? null
+    : Math.round(item.difficulty * 100);
+  const head = pct === null ? '' : `${pct}% ${item.scannable ? 'answered it correctly' : 'of the points were earned'}. `;
+  const written = item.scannable ? '' : ' As a written item it stays in the test — revise it instead of discarding it.';
+
+  if (d === 'Easy' && s === 'Not Discriminating') {
+    return `${head}Almost everyone gets this right and high and low scorers performed the same, so it cannot tell who understands better.${written}`;
+  }
+  if (d === 'Easy') {
+    return `${head}The item is too easy, so it does little to separate strong from weak students. Consider making it more challenging.`;
+  }
+  if (d === 'Hard' && s === 'Not Discriminating') {
+    return `${head}Most students miss it and the high group does no better than the low group, which usually means the item is confusing, miskeyed, or beyond the lesson.${written}`;
+  }
+  if (d === 'Hard') {
+    return `${head}Only a few students answered correctly, yet the high group clearly outperformed the low group — a challenging item that still separates ability well.`;
+  }
+  if (s === 'Not Discriminating') {
+    return `${head}Difficulty is in the ideal range, but high and low scorers performed almost the same, so the item does not measure who understands better.${written}`;
+  }
+  if (s === 'Average') {
+    return `${head}Difficulty is ideal and discrimination is fair, but the item only partly separates strong from weak students.${written}`;
+  }
+  return `${head}Difficulty and discrimination are both in the ideal range, and the high group clearly outperformed the low group — the item works as intended.`;
+}
+
 export function reliabilityBand(value: number | null): 'good' | 'marginal' | 'poor' | 'none' {
   if (value === null || !Number.isFinite(value)) return 'none';
   if (value >= 0.6) return 'good';
@@ -705,7 +741,9 @@ export function buildAnalysisPrintHtml(
         <td>${item.difficultyBand}</td>
         <td class="num">${item.discrimination === null ? '—' : item.discrimination.toFixed(2)}</td>
         <td>${item.discriminationBand}</td>
-        <td class="rec rec-${item.recommendation.replace(/\s+/g, '-').toLowerCase()}">${item.recommendation}</td>
+        <td class="rec rec-${item.recommendation.replace(/\s+/g, '-').toLowerCase()}">${item.recommendation}${
+          explainRecommendation(item) ? `<div class="rec-why">${escapeHtml(explainRecommendation(item))}</div>` : ''
+        }</td>
         <td class="dist">${detail}</td>
       </tr>`;
     })
@@ -770,6 +808,7 @@ export function buildAnalysisPrintHtml(
   .d.bad { color: #8a1f1f; font-weight: 700; }
   .d.reject { color: #6b5a0e; }
   .rec { font-size: 6.9pt; }
+  .rec-why { margin-top: 2px; font-size: 6.2pt; font-weight: 400; color: #444; line-height: 1.3; }
   .rec-discard { color: #8a1f1f; font-weight: 700; }
   .rec-needs-revision { color: #8a1f1f; }
   .rec-may-need-revision { color: #735b12; }

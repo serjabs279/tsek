@@ -3496,6 +3496,14 @@ code,
   color: #6f2118;
 }
 
+.rec-reason {
+  margin-top: 5px;
+  max-width: 230px;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .dist-grid {
   display: flex;
   gap: 4px;

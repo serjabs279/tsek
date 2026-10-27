@@ -3,7 +3,7 @@ import { BLOOM_LEVELS } from '../types';
 import type { AnalysisThresholds, AppSettings, BloomLevel, Exam, Learner, PaperSize, ScanResult, TosPlan } from '../types';
 import { MM_TO_PT, pageSize } from '../omr/layout';
 import type { ItemAnalysisReport } from './analysis';
-import { reliabilityBand } from './analysis';
+import { explainRecommendation, reliabilityBand } from './analysis';
 import { examFileStem } from './exports';
 import { scoreResult } from './scoring';
 import { examSections, isPartScored, manualItems, partScoreKey, totalItemCount, type MaterialItem } from './sections';
@@ -40,6 +40,8 @@ interface Cell {
   text?: string;
   bold?: boolean;
   color?: ReturnType<typeof rgb>;
+  /** Secondary explanation line, rendered smaller and muted under the text. */
+  sub?: string;
   /** Rendered as small bordered pill boxes, e.g. one per distractor. */
   pills?: Pill[];
 }
@@ -273,8 +275,10 @@ class ReportWriter {
           const pillRows = layoutPills(value.pills, inner);
           return { pillRows, height: pillRows.length * (pillHeight + 3) - 3 };
         }
-        const lines = wrapText((value.bold ? this.bold : this.regular), value.text ?? '', bodySize, inner);
-        return { lines, height: lines.length * (bodySize + 2) - 2 };
+        const font = value.bold ? this.bold : this.regular;
+        const lines = wrapText(font, value.text ?? '', bodySize, inner);
+        const subLines = value.sub ? wrapText(this.regular, value.sub, bodySize - 1.2, inner) : [];
+        return { lines, subLines, height: (lines.length + subLines.length) * (bodySize + 2) - 2 };
       });
       const rowHeight = Math.max(...content.map((piece) => piece.height)) + pad * 2.2;
       if (this.y - rowHeight < this.margin + 18) {
@@ -339,6 +343,11 @@ class ReportWriter {
               size: bodySize,
               color: value.color,
             });
+          });
+          const subSize = bodySize - 1.2;
+          (piece.subLines ?? []).forEach((line, subIndex) => {
+            const baseY = this.y - pad * 1.1 - bodySize - (lines.length + subIndex) * (bodySize + 2);
+            this.text(line, x + pad, baseY, { size: subSize, color: MUTED });
           });
         }
         x += widths[index];
@@ -501,8 +510,8 @@ export async function buildItemAnalysisPdf(
     { header: 'Difficulty band', w: 8.5, align: 'center' },
     { header: 'Discrimination index', w: 7, align: 'center' },
     { header: 'Discrimination band', w: 9, align: 'center' },
-    { header: 'Recommendation', w: 9.5, align: 'center' },
-    { header: 'Distractors / written detail', w: 30, align: 'left' },
+    { header: 'Recommendation', w: 14, align: 'center' },
+    { header: 'Distractors / written detail', w: 25.5, align: 'left' },
   ];
   const itemRows = report.items.map((item) => {
     const itemLabel = item.endItem > item.item ? `${item.item}–${item.endItem}` : String(item.item);
@@ -527,7 +536,10 @@ export async function buildItemAnalysisPdf(
       cell(item.difficultyBand),
       cell(item.discrimination === null ? '—' : item.discrimination.toFixed(2)),
       cell(item.discriminationBand),
-      cell(item.recommendation, { bold: item.recommendation === 'Accept' }),
+      cell(item.recommendation, {
+        bold: item.recommendation === 'Accept',
+        sub: explainRecommendation(item) || undefined,
+      }),
       detail,
     ];
   });
@@ -537,6 +549,7 @@ export async function buildItemAnalysisPdf(
       `Discrimination: above ${thresholds.discriminatingAbove.toFixed(2)} = Discriminating · below ${thresholds.notDiscriminatingBelow.toFixed(3)} = Not Discriminating. ` +
       `In the distractor pills, the shaded box marks the key; a red border means the distractor is defective (chosen more by the high group) and an olive border means it was rejected (chosen by nobody). ` +
       `High and Low are counts for scanned items and mean points for written items. ` +
+      `The small text under each recommendation explains the verdict using the same fixed rules that produced it. ` +
       `KR-20 and KR-21 use scanned items only; Cronbach's alpha covers every scored row.`
   );
 

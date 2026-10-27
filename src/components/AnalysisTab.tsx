@@ -22,6 +22,7 @@ import {
   buildAnalysisCsv,
   buildAnalysisPrintHtml,
   buildItemAnalysis,
+  explainRecommendation,
   formatIndex,
   formatPercent,
   reliabilityBand,
@@ -473,6 +474,9 @@ export function AnalysisTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab
                     </td>
                     <td>
                       <span className={`rec-chip rec-chip--${slug(item.recommendation)}`}>{item.recommendation}</span>
+                      {explainRecommendation(item) && (
+                        <div className="rec-reason">{explainRecommendation(item)}</div>
+                      )}
                     </td>
                     <td>
                       {item.scannable ? (
