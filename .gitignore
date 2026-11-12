@@ -12,9 +12,18 @@ dist
 dist-ssr
 *.local
 
+# Compiled test bundles
+tests/.build
+
 # Tauri build artifacts
 src-tauri/target
 src-tauri/gen
+
+# Android build artifacts and local APK drops
+android/src-tauri/target
+android/src-tauri/gen
+android/src-tauri/gen/android/.gradle
+android/apk
 
 # Editor directories and files
 .vscode/*
