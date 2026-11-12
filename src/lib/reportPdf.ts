@@ -3,7 +3,7 @@ import { BLOOM_LEVELS } from '../types';
 import type { AnalysisThresholds, AppSettings, BloomLevel, Exam, Learner, PaperSize, ScanResult, TosPlan } from '../types';
 import { MM_TO_PT, pageSize } from '../omr/layout';
 import type { ItemAnalysisReport } from './analysis';
-import { explainRecommendation, reliabilityBand } from './analysis';
+import { explainRecommendation, reliabilityBand, scopeLabel } from './analysis';
 import { examFileStem } from './exports';
 import { scoreResult } from './scoring';
 import { examSections, isPartScored, manualItems, partScoreKey, totalItemCount, type MaterialItem } from './sections';
@@ -268,7 +268,12 @@ class ReportWriter {
     drawHeader();
 
     rows.forEach((row, rowIndex) => {
-      type Content = { lines?: string[]; pillRows?: { pill: Pill; x: number; w: number }[][]; height: number };
+      type Content = {
+        lines?: string[];
+        subLines?: string[];
+        pillRows?: { pill: Pill; x: number; w: number }[][];
+        height: number;
+      };
       const content: Content[] = row.map((value, index) => {
         const inner = widths[index] - pad * 2;
         if (value.pills && value.pills.length > 0) {
@@ -439,10 +444,12 @@ const fmt = (value: number, digits = 2): string =>
 
 export async function buildItemAnalysisPdf(
   exam: Exam,
-  report: ItemAnalysisReport,
+  reports: ItemAnalysisReport[],
   settings: AppSettings,
   thresholds: AnalysisThresholds
 ): Promise<Uint8Array> {
+  const overall = reports.find((report) => report.scope === 'overall') ?? reports[0];
+  const visible = reports.filter((report) => report.scope === 'overall' || report.itemCount > 0);
   const writer = await ReportWriter.create(`Item analysis — ${exam.title}`, settings.paper);
   writer.banner(settings);
   writer.title('ITEM ANALYSIS REPORT');
@@ -454,10 +461,10 @@ export async function buildItemAnalysisPdf(
     ['Quarter', exam.quarterKey],
   ]);
   writer.metaLine([
-    ['Analyzed', `${report.takers} of ${report.checkedCount} checked`],
-    ['Items', `${report.itemCount} (${report.scannedItemCount} scanned · ${report.writtenItemCount} written)`],
-    ['Points', String(report.points)],
-    ['Group N', String(report.groupSize)],
+    ['Analyzed', `${overall.takers} of ${overall.checkedCount} checked`],
+    ['Items', `${overall.itemCount} (${overall.scannedItemCount} right/wrong · ${overall.writtenItemCount} written)`],
+    ['Points', String(overall.points)],
+    ['Group N', String(overall.groupSize)],
   ]);
   writer.y -= 4;
 
@@ -465,94 +472,210 @@ export async function buildItemAnalysisPdf(
     const band = reliabilityBand(value);
     return band === 'good' ? 'Reliable' : band === 'marginal' ? 'Marginal' : band === 'poor' ? 'Not reliable' : '—';
   };
+  const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
 
-  writer.heading('Test reliability');
+  // At-a-glance comparison of the three views. This is where the difference
+  // between average item difficulty and overall points earned is visible.
+  writer.heading('Summary by view');
   writer.table(
     [
-      { header: 'Measure', w: 26, align: 'left' },
-      { header: 'Value', w: 12, align: 'center' },
-      { header: 'Verdict', w: 14, align: 'center' },
-      { header: 'Class summary', w: 48, align: 'left' },
+      { header: 'View', w: 16, align: 'left' },
+      { header: 'Items', w: 6, align: 'center' },
+      { header: 'Points', w: 6, align: 'center' },
+      { header: 'Mean score', w: 9, align: 'center' },
+      { header: 'Points earned', w: 9, align: 'center' },
+      { header: 'Avg. item difficulty', w: 11, align: 'center' },
+      { header: 'Avg. discrimination', w: 11, align: 'center' },
+      { header: 'Reliability', w: 32, align: 'left' },
     ],
-    [
+    visible.map((report) => [
+      cell(scopeLabel(report.scope), { bold: true }),
+      cell(String(report.itemCount)),
+      cell(String(report.points)),
+      cell(`${fmt(report.reliability.mean)} / ${report.points}`),
+      cell(pct(report.pointsEarnedRatio)),
+      cell(report.averageDifficulty === null ? '—' : fmt(report.averageDifficulty)),
+      cell(report.averageDiscrimination === null ? '—' : fmt(report.averageDiscrimination)),
+      cell(
+        report.scope === 'non-mcq'
+          ? `Cronbach’s alpha ${report.reliability.alpha === null ? '—' : report.reliability.alpha.toFixed(3)} (${verdict(report.reliability.alpha)})`
+          : `KR-20 ${report.reliability.kr20 === null ? '—' : report.reliability.kr20.toFixed(3)} (${verdict(report.reliability.kr20)}) · alpha ${report.reliability.alpha === null ? '—' : report.reliability.alpha.toFixed(3)}`
+      ),
+    ]),
+    { bodySize: 8, zebra: true }
+  );
+  writer.paragraph(
+    'Average item difficulty is the mean of the per-item difficulty values. Points earned is the class total divided by the points possible, so the two differ when items carry different maximum points. KR-20 and KR-21 are used only for right/wrong items; the written view reports Cronbach’s alpha because partial credit is not dichotomous.',
+    7.2
+  );
+
+  visible.forEach((report, index) => {
+    if (index > 0) writer.newPage();
+    writer.heading(`${scopeLabel(report.scope)} · reliability and class totals`);
+    const scannedRows: Cell[][] = [
       [
-        cell('KR-20 (scanned items)'),
+        cell('KR-20 (right/wrong items)'),
         cell(report.reliability.kr20 === null ? '—' : report.reliability.kr20.toFixed(3)),
         cell(verdict(report.reliability.kr20)),
-        cell(`Average difficulty ${report.averageDifficulty === null ? '—' : fmt(report.averageDifficulty)} · average discrimination ${report.averageDiscrimination === null ? '—' : fmt(report.averageDiscrimination)}`),
-      ],
-      [
-        cell('KR-21 (scanned items)'),
-        cell(report.reliability.kr21 === null ? '—' : report.reliability.kr21.toFixed(3)),
-        cell(verdict(report.reliability.kr21)),
-        cell(`Mean score ${fmt(report.reliability.mean)} of ${report.points} pts · SD ${fmt(report.reliability.standardDeviation)}`),
-      ],
-      [
-        cell("Cronbach's alpha (all items)"),
-        cell(report.reliability.alpha === null ? '—' : report.reliability.alpha.toFixed(3)),
-        cell(verdict(report.reliability.alpha)),
         cell(
-          `Accept: ${report.recommendationCounts.Accept} · May need revision: ${report.recommendationCounts['May Need Revision']} · Needs revision: ${report.recommendationCounts['Needs Revision']} · Discard: ${report.recommendationCounts.Discard}`
+          `Average item difficulty ${report.averageDifficulty === null ? '—' : fmt(report.averageDifficulty)} · average discrimination ${report.averageDiscrimination === null ? '—' : fmt(report.averageDiscrimination)}`
         ),
       ],
-    ],
-    { bodySize: 8.4 }
-  );
-
-  writer.heading('Per-item results');
-  const itemCols: Col[] = [
-    { header: 'Item no.', w: 5, align: 'center' },
-    { header: 'Part', w: 9, align: 'left' },
-    { header: 'Key', w: 4.5, align: 'center' },
-    { header: 'High group', w: 5.5, align: 'center' },
-    { header: 'Low group', w: 5.5, align: 'center' },
-    { header: 'Difficulty index', w: 6.5, align: 'center' },
-    { header: 'Difficulty band', w: 8.5, align: 'center' },
-    { header: 'Discrimination index', w: 7, align: 'center' },
-    { header: 'Discrimination band', w: 9, align: 'center' },
-    { header: 'Recommendation', w: 14, align: 'center' },
-    { header: 'Distractors / written detail', w: 25.5, align: 'left' },
-  ];
-  const itemRows = report.items.map((item) => {
-    const itemLabel = item.endItem > item.item ? `${item.item}–${item.endItem}` : String(item.item);
-    const detail: Cell = item.scannable
-      ? {
-          pills: item.choices.map((choice) => ({
-            text: `${choice.choice} ${choice.high}/${choice.low}${choice.isKey ? ' · key' : choice.status === 'D' ? ' · defect' : choice.status === 'R' ? ' · rejected' : ''}`,
-            bold: choice.isKey,
-            tone: choice.isKey ? TONE_KEY : choice.status === 'D' ? TONE_DEFECT : choice.status === 'R' ? TONE_REJECT : undefined,
-          })),
-        }
-      : cell(
-          `${item.part ? 'Whole written part' : 'Written item'} — mean ${fmt(item.meanEarned)} of ${fmt(item.points)} pts · ${item.scoredCount} scored`
-        );
-    return [
-      cell(itemLabel),
-      cell(`${item.sectionTitle}${item.part ? ' (pooled part)' : ''}`),
-      cell(item.key || '—'),
-      cell(item.scannable ? String(item.highCorrect) : fmt(item.highMean)),
-      cell(item.scannable ? String(item.lowCorrect) : fmt(item.lowMean)),
-      cell(item.difficulty === null ? '—' : item.difficulty.toFixed(2)),
-      cell(item.difficultyBand),
-      cell(item.discrimination === null ? '—' : item.discrimination.toFixed(2)),
-      cell(item.discriminationBand),
-      cell(item.recommendation, {
-        bold: item.recommendation === 'Accept',
-        sub: explainRecommendation(item) || undefined,
-      }),
-      detail,
+      [
+        cell('KR-21 (right/wrong items)'),
+        cell(report.reliability.kr21 === null ? '—' : report.reliability.kr21.toFixed(3)),
+        cell(verdict(report.reliability.kr21)),
+        cell(`Mean score ${fmt(report.reliability.mean)} of ${report.points} pts · points earned ${pct(report.pointsEarnedRatio)} · SD ${fmt(report.reliability.standardDeviation)}`),
+      ],
     ];
-  });
-  writer.table(itemCols, itemRows, { zebra: true });
-  writer.paragraph(
-    `Difficulty: above ${thresholds.easyAbove.toFixed(2)} = Easy · below ${thresholds.hardBelow.toFixed(2)} = Hard · otherwise Average. ` +
-      `Discrimination: above ${thresholds.discriminatingAbove.toFixed(2)} = Discriminating · below ${thresholds.notDiscriminatingBelow.toFixed(3)} = Not Discriminating. ` +
-      `In the distractor pills, the shaded box marks the key; a red border means the distractor is defective (chosen more by the high group) and an olive border means it was rejected (chosen by nobody). ` +
-      `High and Low are counts for scanned items and mean points for written items. ` +
-      `The small text under each recommendation explains the verdict using the same fixed rules that produced it. ` +
-      `KR-20 and KR-21 use scanned items only; Cronbach's alpha covers every scored row.`
-  );
+    const reliabilityRows: Cell[][] =
+      report.scope === 'non-mcq'
+        ? [
+            [
+              cell('Cronbach’s alpha (written items)'),
+              cell(report.reliability.alpha === null ? '—' : report.reliability.alpha.toFixed(3)),
+              cell(verdict(report.reliability.alpha)),
+              cell(
+                `Average item difficulty ${report.averageDifficulty === null ? '—' : fmt(report.averageDifficulty)} · average discrimination ${report.averageDiscrimination === null ? '—' : fmt(report.averageDiscrimination)}`
+              ),
+            ],
+            [
+              cell('Class totals'),
+              cell(`${fmt(report.reliability.mean)} / ${report.points}`),
+              cell('—'),
+              cell(
+                `Points earned ${pct(report.pointsEarnedRatio)} · SD ${fmt(report.reliability.standardDeviation)} · ${report.unitCount} scored rows · ${report.takers} analyzed`
+              ),
+            ],
+          ]
+        : [
+            ...scannedRows,
+            [
+              cell('Cronbach’s alpha (this view)'),
+              cell(report.reliability.alpha === null ? '—' : report.reliability.alpha.toFixed(3)),
+              cell(verdict(report.reliability.alpha)),
+              cell(
+                `Accept: ${report.recommendationCounts.Accept} · May need revision: ${report.recommendationCounts['May Need Revision']} · Needs revision: ${report.recommendationCounts['Needs Revision']} · Discard: ${report.recommendationCounts.Discard}`
+              ),
+            ],
+          ];
+    writer.table(
+      [
+        { header: 'Measure', w: 26, align: 'left' },
+        { header: 'Value', w: 12, align: 'center' },
+        { header: 'Verdict', w: 14, align: 'center' },
+        { header: 'Class summary', w: 48, align: 'left' },
+      ],
+      reliabilityRows,
+      { bodySize: 8.4 }
+    );
 
+    writer.heading(`${scopeLabel(report.scope)} · per-item results`);
+    if (report.scope === 'non-mcq') {
+      const cols: Col[] = [
+        { header: 'Item no.', w: 5, align: 'center' },
+        { header: 'Part', w: 18, align: 'left' },
+        { header: 'Max pts', w: 5, align: 'center' },
+        { header: 'Mean', w: 6, align: 'center' },
+        { header: 'Median', w: 6, align: 'center' },
+        { header: 'Lowest–highest', w: 9, align: 'center' },
+        { header: 'Scored', w: 5, align: 'center' },
+        { header: 'Difficulty %', w: 7, align: 'center' },
+        { header: 'Difficulty band', w: 9, align: 'center' },
+        { header: 'Item–total r', w: 7, align: 'center' },
+        { header: 'Discrimination band', w: 11, align: 'center' },
+        { header: 'Recommendation', w: 15, align: 'center' },
+      ];
+      writer.table(
+        cols,
+        report.items.map((item) => {
+          const label = item.endItem > item.item ? `${item.item}–${item.endItem}` : String(item.item);
+          const range =
+            item.scoreMin === null || item.scoreMax === null ? '—' : `${fmt(item.scoreMin)} – ${fmt(item.scoreMax)}`;
+          return [
+            cell(label),
+            cell(`${item.sectionTitle}${item.part ? ' (pooled part)' : ''}`),
+            cell(fmt(item.points)),
+            cell(fmt(item.meanEarned)),
+            cell(item.scoreMedian === null ? '—' : fmt(item.scoreMedian)),
+            cell(range),
+            cell(String(item.scoredCount)),
+            cell(item.difficulty === null ? '—' : `${Math.round(item.difficulty * 100)}%`),
+            cell(item.difficultyBand),
+            cell(item.discrimination === null ? '—' : fmt(item.discrimination)),
+            cell(item.discriminationBand),
+            cell(item.recommendation, {
+              bold: item.recommendation === 'Accept',
+              sub: explainRecommendation(item, report.scope) || undefined,
+            }),
+          ];
+        }),
+        { zebra: true }
+      );
+      writer.paragraph(
+        `Difficulty is the points earned on the item divided by the points possible for that item, so items with different maximum points stay comparable. Discrimination is the corrected item–total correlation: each item’s share of its points is correlated with the written total after removing that item from the total. KR-20 and KR-21 are not reported for written items. Difficulty: above ${thresholds.easyAbove.toFixed(2)} = Easy · below ${thresholds.hardBelow.toFixed(2)} = Hard · otherwise Average. Discrimination: above ${thresholds.discriminatingAbove.toFixed(2)} = Discriminating · below ${thresholds.notDiscriminatingBelow.toFixed(3)} = Not Discriminating.`
+      );
+      return;
+    }
+
+    const itemCols: Col[] = [
+      { header: 'Item no.', w: 5, align: 'center' },
+      { header: 'Part', w: 9, align: 'left' },
+      { header: 'Key', w: 4.5, align: 'center' },
+      { header: 'High group', w: 5.5, align: 'center' },
+      { header: 'Low group', w: 5.5, align: 'center' },
+      { header: 'Difficulty index', w: 6.5, align: 'center' },
+      { header: 'Difficulty band', w: 8.5, align: 'center' },
+      { header: 'Discrimination index', w: 7, align: 'center' },
+      { header: 'Discrimination band', w: 9, align: 'center' },
+      { header: 'Recommendation', w: 14, align: 'center' },
+      { header: 'Distractors / written detail', w: 25.5, align: 'left' },
+    ];
+    const itemRows = report.items.map((item) => {
+      const itemLabel = item.endItem > item.item ? `${item.item}–${item.endItem}` : String(item.item);
+      const detail: Cell = item.scannable
+        ? {
+            pills: item.choices.map((choice) => ({
+              text: `${choice.choice} ${choice.high}/${choice.low}${choice.isKey ? ' · key' : choice.status === 'D' ? ' · defect' : choice.status === 'R' ? ' · rejected' : ''}`,
+              bold: choice.isKey,
+              tone: choice.isKey ? TONE_KEY : choice.status === 'D' ? TONE_DEFECT : choice.status === 'R' ? TONE_REJECT : undefined,
+            })),
+          }
+        : cell(
+            `${item.part ? 'Whole written part' : 'Written item'} — mean ${fmt(item.meanEarned)} of ${fmt(item.points)} pts · median ${item.scoreMedian === null ? '—' : fmt(item.scoreMedian)} · ${item.scoredCount} scored`
+          );
+      return [
+        cell(itemLabel),
+        cell(`${item.sectionTitle}${item.part ? ' (pooled part)' : ''}`),
+        cell(item.key || '—'),
+        cell(item.scannable ? String(item.highCorrect) : fmt(item.highMean)),
+        cell(item.scannable ? String(item.lowCorrect) : fmt(item.lowMean)),
+        cell(item.difficulty === null ? '—' : item.difficulty.toFixed(2)),
+        cell(item.difficultyBand),
+        cell(item.discrimination === null ? '—' : item.discrimination.toFixed(2)),
+        cell(item.discriminationBand),
+        cell(item.recommendation, {
+          bold: item.recommendation === 'Accept',
+          sub: explainRecommendation(item, report.scope) || undefined,
+        }),
+        detail,
+      ];
+    });
+    writer.table(itemCols, itemRows, { zebra: true });
+    writer.paragraph(
+      `Difficulty: above ${thresholds.easyAbove.toFixed(2)} = Easy · below ${thresholds.hardBelow.toFixed(2)} = Hard · otherwise Average. ` +
+        `Discrimination: above ${thresholds.discriminatingAbove.toFixed(2)} = Discriminating · below ${thresholds.notDiscriminatingBelow.toFixed(3)} = Not Discriminating. ` +
+        `In the distractor pills, the shaded box marks the key; a red border means the distractor is defective (chosen more by the high group) and an olive border means it was rejected (chosen by nobody). ` +
+        `High and Low are counts for scanned items and mean points for written items. ` +
+        `The small text under each recommendation explains the verdict using the same fixed rules that produced it. ` +
+        `In this view difficulty is the proportion of takers who answered correctly and discrimination is the high-group proportion minus the low-group proportion.`
+    );
+  });
+
+  writer.heading('High and low groups · overall');
+  writer.paragraph(
+    `The groups are ranked on the overall combined score, so the same students are compared in every view. Group N = ${overall.groupSize}.`
+  );
   const groupTable = (title: string, group: { name: string; score: number; possible: number; percentage: number }[]) => {
     writer.heading(`${title} (N = ${group.length})`);
     writer.table(
@@ -571,8 +694,8 @@ export async function buildItemAnalysisPdf(
       { bodySize: 8.4 }
     );
   };
-  groupTable('High group', report.highGroup);
-  groupTable('Low group', report.lowGroup);
+  groupTable('High group', overall.highGroup);
+  groupTable('Low group', overall.lowGroup);
 
   writer.signatureBlock(exam.teacherName || '', 'Prepared by', 'Checked by / School Head');
   writer.finish(`Item analysis · ${exam.title}`);
