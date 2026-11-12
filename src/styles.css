@@ -1146,6 +1146,7 @@ code,
 
 .modal-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -2179,6 +2180,12 @@ code,
   font-size: 0.62rem;
 }
 
+.flag-chip--ok {
+  border-color: #bfd8c4;
+  background: #f0f7f1;
+  color: #2f5a41;
+}
+
 .self-test-panel {
   display: flex;
   align-items: center;
@@ -2437,6 +2444,8 @@ code,
 
 .detail-answer-row__answer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
 }
 
@@ -3286,6 +3295,50 @@ code,
   gap: 4px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.analysis-view-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.analysis-scoreband {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin-top: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.analysis-scoreband__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 118px;
+}
+
+.analysis-scoreband__label {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.analysis-scoreband__value {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.86rem;
+}
+
+.analysis-scoreband__hint {
+  color: var(--muted);
+  font-size: 0.63rem;
 }
 
 .analysis-filter {

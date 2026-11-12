@@ -156,8 +156,12 @@ export interface ItemFlag {
   item: number;
   chosen: string | null;
   filled: string[];
+  /** Dark coverage (0–1) for each filled choice, so a borderline bubble can be told apart from a real shade. */
+  strength?: Record<string, number>;
   ambiguous: boolean;
   multiple: boolean;
+  /** True once the teacher confirmed this flagged answer during review. */
+  resolved?: boolean;
   confidence: number;
 }
 
@@ -178,6 +182,8 @@ export interface ScanResult {
   qrOk: boolean;
   needsReview: boolean;
   manualOverride: boolean;
+  /** A teacher reviewed the sheet and confirmed the scanned answers without changing any. */
+  verifiedManually?: boolean;
   /** Direct scores for written items, keyed by section id and item position. */
   manualScores?: Record<string, number>;
 }

@@ -525,6 +525,7 @@ function readSheetImageData(source: ImageData, exam: Exam, onProgress?: Progress
             item: item.item,
             chosen: null,
             filled: [],
+            strength: {},
             ambiguous: false,
             multiple: false,
             confidence: 0.2,
@@ -552,6 +553,9 @@ function readSheetImageData(source: ImageData, exam: Exam, onProgress?: Progress
           item: item.item,
           chosen: best.choice,
           filled: marked.map((reading) => reading.choice),
+          strength: Object.fromEntries(
+            marked.map((reading) => [reading.choice, Math.round(reading.darkRatio * 100) / 100])
+          ),
           ambiguous,
           multiple,
           confidence: Math.round(confidence * 100) / 100,

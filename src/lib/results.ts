@@ -100,6 +100,20 @@ export function recalculateResult(
     grade: score.grade,
     needsReview: options.keepReview ? result.needsReview : false,
     manualOverride: options.keepReview ? result.manualOverride : true,
+    verifiedManually: options.keepReview ? result.verifiedManually : false,
+  };
+}
+
+/** Confirm one scanner flag without changing the scanned answer. */
+export function resolveFlag(result: ScanResult, itemNumber: number): ScanResult {
+  const flags = result.flags.map((flag) => (flag.item === itemNumber ? { ...flag, resolved: true } : flag));
+  const stillOpen = flags.some((flag) => !flag.resolved);
+  const needsReview = result.verifiedManually ? false : stillOpen;
+  return {
+    ...result,
+    flags,
+    needsReview,
+    verifiedManually: result.verifiedManually || (!needsReview && !result.manualOverride),
   };
 }
 

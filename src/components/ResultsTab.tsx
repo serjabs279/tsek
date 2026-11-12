@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
+  Check,
   CheckCircle2,
   Download,
   FileDown,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { Exam, ScanResult } from '../types';
 import { useApp } from '../store/AppStore';
-import { analyzeItems, rateTone, recalculateResult, summarize } from '../lib/results';
+import { analyzeItems, rateTone, recalculateResult, resolveFlag, summarize } from '../lib/results';
 import { manualSlots, materializeItems } from '../lib/sections';
 import { scoreResult } from '../lib/scoring';
 import { downloadResultsArchive, downloadResultsCsv } from '../lib/exports';
@@ -222,6 +223,8 @@ export function ResultsTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab:
                                 <span className="pill pill--amber"><PenLine size={11} /> incomplete</span>
                               ) : result.manualOverride ? (
                                 <span className="pill pill--neutral">edited</span>
+                              ) : result.verifiedManually ? (
+                                <span className="pill pill--green"><CheckCircle2 size={11} /> verified</span>
                               ) : (
                                 <span className="pill pill--green">ok</span>
                               )
@@ -344,6 +347,31 @@ export function ResultsTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab:
           setDetail(updated);
           toast('Correction saved and score recalculated.', 'success');
         }}
+        onVerify={() => {
+          if (!detail) return;
+          const updated: ScanResult = {
+            ...detail,
+            flags: detail.flags.map((flag) => ({ ...flag, resolved: true })),
+            needsReview: false,
+            verifiedManually: true,
+          };
+          updateResult(detail.id, updated);
+          setDetail(updated);
+          toast(`${detail.name} marked as verified — answers unchanged.`, 'success');
+        }}
+        onResolveFlag={(itemNumber) => {
+          if (!detail) return;
+          const updated = resolveFlag(detail, itemNumber);
+          const stillOpen = updated.flags.filter((flag) => !flag.resolved).length;
+          updateResult(detail.id, updated);
+          setDetail(updated);
+          toast(
+            updated.needsReview
+              ? `Item ${itemNumber} confirmed. ${stillOpen} flagged item${stillOpen === 1 ? '' : 's'} still open.`
+              : `${detail.name} is now verified.`,
+            'success'
+          );
+        }}
         onDelete={() => {
           if (detail) setConfirmDelete(detail);
         }}
@@ -392,6 +420,8 @@ function ResultDetail({
   onClose,
   onOpenScores,
   onSave,
+  onVerify,
+  onResolveFlag,
   onDelete,
 }: {
   exam: Exam;
@@ -399,6 +429,8 @@ function ResultDetail({
   onClose: () => void;
   onOpenScores: () => void;
   onSave: (answers: (string | null)[]) => void;
+  onVerify: () => void;
+  onResolveFlag: (itemNumber: number) => void;
   onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<(string | null)[]>([]);
@@ -412,6 +444,7 @@ function ResultDetail({
 
   const score = scoreResult(exam, { ...result, answers: draft });
   const flagByItem = new Map(result.flags.map((flag) => [flag.item, flag]));
+  const openFlags = result.flags.filter((flag) => !flag.resolved).length;
   const dirty = draft.some((answer, index) => answer !== result.answers[index]);
 
   const setChoice = (index: number, choice: string | null) => {
@@ -437,7 +470,12 @@ function ResultDetail({
             </button>
           )}
           <button className="btn btn--ghost" onClick={onClose}>Close</button>
-          <button className="btn btn--primary" onClick={() => onSave(draft)} disabled={!dirty}>
+          {result.needsReview && !dirty && (
+            <button className="btn btn--primary" onClick={onVerify}>
+              <CheckCircle2 size={14} /> Mark as verified
+            </button>
+          )}
+          <button className={`btn ${dirty ? 'btn--primary' : 'btn--soft'}`} onClick={() => onSave(draft)} disabled={!dirty}>
             Save corrections
           </button>
         </>
@@ -451,7 +489,13 @@ function ResultDetail({
           {score.manualCount > 0 && (
             <span>{points(score.objectiveEarned)} scanned + {points(score.manualEarned)} written</span>
           )}
-          {result.flags.length > 0 && <span>{result.flags.length} flagged</span>}
+          {result.flags.length > 0 && (
+            <span>
+              {openFlags > 0
+                ? `${openFlags} of ${result.flags.length} flagged`
+                : `${result.flags.length} flagged · all confirmed`}
+            </span>
+          )}
           {result.manualOverride && <Badge tone="neutral">manually edited</Badge>}
         </div>
         <div className="row" style={{ gap: 6 }}>
@@ -459,13 +503,16 @@ function ResultDetail({
           {score.manualCount > 0 && !score.complete && (
             <Badge tone="amber">{score.manualCount - score.manualScored} written blank</Badge>
           )}
-          <Badge tone={result.needsReview ? 'amber' : 'green'}>{result.needsReview ? 'needs review' : 'reviewed'}</Badge>
+          <Badge tone={result.needsReview ? 'amber' : 'green'}>
+            {result.needsReview ? 'needs review' : result.verifiedManually ? 'manually verified' : 'reviewed'}
+          </Badge>
         </div>
       </div>
 
       <div className="card-note" style={{ marginBottom: 14 }}>
         Source: {result.sourceFile || 'manual'} · page {result.pageNumber} · checked {new Date(result.scannedAt).toLocaleString()}
         {result.flags.length > 0 ? ' · amber items were flagged by the scanner.' : ''}
+        {result.verifiedManually ? ' · answers confirmed by the teacher without changes; flags kept as a record.' : ''}
         {score.manualCount > 0 ? ` · written ${points(score.manualEarned)} of ${points(score.manualPossible)} points in ${score.manualScored}/${score.manualCount} scores.` : ''}
       </div>
 
@@ -477,6 +524,13 @@ function ResultDetail({
           const wrong = Boolean(answer && key && answer !== key);
           const blank = !answer;
           const flag = flagByItem.get(item.number);
+          const strengthText =
+            flag?.strength && Object.keys(flag.strength).length > 0
+              ? Object.entries(flag.strength)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([choice, value]) => `${choice} ${value.toFixed(2)}`)
+                  .join(' · ')
+              : '';
           const newSection = position === 0 || items[position - 1].sectionIndex !== item.sectionIndex;
           return (
             <Fragment key={`${item.sectionId}:${item.indexInSection}`}>
@@ -502,9 +556,35 @@ function ResultDetail({
                   ))}
                   {blank && <span className="pill pill--amber" style={{ marginLeft: 4 }}>blank</span>}
                   {flag && (
-                    <span className="flag-chip" style={{ marginLeft: 4 }}>
-                      {flag.multiple ? 'double shade' : flag.ambiguous ? 'close call' : 'faint'}
+                    <span
+                      className={`flag-chip ${flag.resolved ? 'flag-chip--ok' : ''}`}
+                      style={{ marginLeft: 4 }}
+                      title={
+                        flag.resolved
+                          ? 'Confirmed by the teacher — the scanned answer was kept.'
+                          : strengthText
+                            ? `Dark coverage per bubble (marked above 0.40): ${strengthText}`
+                            : undefined
+                      }
+                    >
+                      {flag.resolved
+                        ? 'confirmed'
+                        : flag.multiple
+                          ? 'double shade'
+                          : flag.ambiguous
+                            ? 'close call'
+                            : 'faint'}
+                      {!flag.resolved && strengthText ? ` · ${strengthText}` : ''}
                     </span>
+                  )}
+                  {flag && !flag.resolved && (
+                    <button
+                      className="icon-btn icon-btn--sm"
+                      title={`Confirm item ${item.number} — keep ${answer ?? 'the blank'} as the answer`}
+                      onClick={() => onResolveFlag(item.number)}
+                    >
+                      <Check size={12} />
+                    </button>
                   )}
                 </div>
                 <span className="tiny faint">{wrong ? 'wrong' : answer ? 'correct' : 'blank'}</span>
