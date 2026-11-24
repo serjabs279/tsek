@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
+  FileText,
   ListChecks,
+  PenLine,
   ScanLine,
   Settings,
   Settings2,
@@ -15,20 +17,32 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { SetupScreen } from './screens/SetupScreen';
 import { RosterScreen } from './screens/RosterScreen';
 import { KeyScreen } from './screens/KeyScreen';
+import { SheetsScreen } from './screens/SheetsScreen';
 import { ScanScreen } from './screens/ScanScreen';
+import { ScoresScreen } from './screens/ScoresScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
 import { NewExamSheet } from './components/NewExamSheet';
 import { totalItemCount } from '@shared/lib/sections';
 
-export type ExamTab = 'setup' | 'roster' | 'key' | 'scan' | 'results' | 'analysis';
+export type ExamTab =
+  | 'setup'
+  | 'roster'
+  | 'key'
+  | 'sheets'
+  | 'scan'
+  | 'scores'
+  | 'results'
+  | 'analysis';
 type View = 'home' | 'exam' | 'settings';
 
 const TABS: Array<{ id: ExamTab; label: string; icon: typeof ScanLine }> = [
   { id: 'setup', label: 'Setup', icon: Settings2 },
   { id: 'roster', label: 'Roster', icon: Users },
   { id: 'key', label: 'Key', icon: ListChecks },
+  { id: 'sheets', label: 'Sheets', icon: FileText },
   { id: 'scan', label: 'Scan', icon: ScanLine },
+  { id: 'scores', label: 'Scores', icon: PenLine },
   { id: 'results', label: 'Results', icon: Table2 },
   { id: 'analysis', label: 'Analysis', icon: BarChart3 },
 ];
@@ -107,7 +121,7 @@ export function MobileApp() {
       <main className={`m-main ${view === 'exam' ? '' : 'm-main--plain'}`}>
         {view === 'home' && (
           <HomeScreen
-            onOpenExam={(id) => openExam(id)}
+            onOpenExam={(id, initialTab) => openExam(id, initialTab)}
             onNewExam={() => setNewExamOpen(true)}
             onSettings={() => setView('settings')}
           />
@@ -118,7 +132,9 @@ export function MobileApp() {
             {tab === 'setup' && <SetupScreen exam={activeExam} onNavigate={openTab} onDeleted={goHome} />}
             {tab === 'roster' && <RosterScreen exam={activeExam} />}
             {tab === 'key' && <KeyScreen exam={activeExam} onNavigate={openTab} />}
+            {tab === 'sheets' && <SheetsScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'scan' && <ScanScreen exam={activeExam} onNavigate={openTab} />}
+            {tab === 'scores' && <ScoresScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'results' && <ResultsScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'analysis' && <AnalysisScreen exam={activeExam} onNavigate={openTab} />}
           </>

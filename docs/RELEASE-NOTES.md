@@ -1,6 +1,48 @@
 # Tsek release notes
 
-**Version 0.1.0** · 28 October 2026
+## Version 0.2.0 · 24 November 2026
+
+Tsek for Android is no longer a companion to the desktop app. It runs the same
+scoring, OMR, and item-analysis engine, and now finishes the whole job on a
+tablet: save the answer sheets as PDF, scan the returned papers, type the
+written scores, and file the reports — no PC required.
+
+### New in this build
+
+- **Written scores on the tablet.** A new Scores tab types the identification,
+  enumeration, and essay marks per learner, or one total for a pooled written
+  part. The running total, grade, and class average update as you type.
+- **Every "print" action saves a PDF.** A new Sheets tab builds the answer
+  sheets, combined folio pages (bubble half and written panel on one sheet), and
+  written-only pages, then hands the file to Android's own save picker so the
+  teacher chooses the folder. Results and item analysis save the same way.
+- **Restore on the tablet.** Settings lists the seven rolling snapshots with
+  what each holds and when it was taken. Restoring asks for the word RESTORE
+  and keeps the current state as a snapshot first, so it can be undone.
+- **Combined folio sheet, desktop too.** A two-up folio page can carry the
+  bubble half and a written-answer panel side by side, so a mixed test needs one
+  sheet per learner instead of two.
+- **Dashboard queue.** The home screen lists what is waiting — missing roster,
+  unfinished key, sheets not saved, flagged papers, written scores to type — and
+  links straight to the right tab.
+
+### Verified
+
+- TypeScript clean on desktop and Android; production bundles build; the
+  written-sheet test suite passes 11/11.
+- In the browser build: eight exam tabs, live written-score recalculation,
+  combined-preview geometry, PDF generation for sheets, scores, results, and
+  analysis, and the RESTORE dialog gating.
+- The Android APK is signed with the Tsek release key, so it installs as an
+  update over the previous build and keeps the workspace on the tablet.
+
+Known limits for 0.2.0: the save picker, camera, and PDF sharing run inside
+Android's WebView and were exercised in the browser build only; physical-device
+behaviour still needs a pass on the pilot tablets.
+
+---
+
+## Version 0.1.0 · 28 October 2026
 
 Tsek is a local-first exam checker. You print answer sheets, scan the stack, and
 get a clean record of every score. It runs on this device only — no accounts, no

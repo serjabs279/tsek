@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, ScanLine } from 'lucide-react';
+import { AlertTriangle, BarChart3, FileDown, ScanLine } from 'lucide-react';
 import type { AnalysisThresholds, Exam } from '@shared/types';
 import { useApp } from '@shared/store/AppStore';
 import {
@@ -14,8 +14,10 @@ import {
   type ItemStat,
   type Recommendation,
 } from '@shared/lib/analysis';
-import { Badge } from '@shared/components/ui';
+import { buildItemAnalysisPdf, reportFilename } from '@shared/lib/reportPdf';
+import { Badge, Spinner } from '@shared/components/ui';
 import { EmptyBlock, ScreenHead, StatTile } from '../components/Common';
+import { savePdf } from '../lib/savePdf';
 import type { ExamTab } from '../MobileApp';
 
 type Scope = 'overall' | 'mcq' | 'non-mcq';
@@ -39,9 +41,10 @@ function itemTitle(item: ItemStat): string {
 }
 
 export function AnalysisScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: ExamTab) => void }) {
-  const { state } = useApp();
+  const { state, toast } = useApp();
   const results = state.results.filter((result) => result.examId === exam.id);
   const [scope, setScope] = useState<Scope>('overall');
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const thresholds: AnalysisThresholds = exam.analysis ?? DEFAULT_ANALYSIS_THRESHOLDS;
   const reports = useMemo(
@@ -57,6 +60,29 @@ export function AnalysisScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (
   const hasMcq = reports.mcq.unitCount > 0;
   const hasWritten = reports['non-mcq'].unitCount > 0;
 
+  const saveReport = async () => {
+    if (reports.overall.takers === 0) {
+      toast('Check at least one answer sheet before saving the report.', 'danger');
+      return;
+    }
+    setPdfBusy(true);
+    try {
+      const bytes = await buildItemAnalysisPdf(
+        exam,
+        [reports.overall, reports.mcq, reports['non-mcq']],
+        state.settings,
+        thresholds
+      );
+      if (await savePdf(bytes, reportFilename('ItemAnalysis', exam))) {
+        toast('Item analysis saved as PDF.', 'success');
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   return (
     <>
       <ScreenHead
@@ -64,9 +90,14 @@ export function AnalysisScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (
         title="How the items behaved"
         subtitle={`${results.length} checked sheet${results.length === 1 ? '' : 's'} · ${report.takers} complete paper${report.takers === 1 ? '' : 's'} analysed`}
         actions={
-          <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
-            <ScanLine size={15} /> Scan
-          </button>
+          <>
+            <button className="btn btn--soft btn--sm" onClick={() => void saveReport()} disabled={pdfBusy || results.length === 0}>
+              {pdfBusy ? <Spinner size={14} /> : <FileDown size={15} />} PDF
+            </button>
+            <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
+              <ScanLine size={15} /> Scan
+            </button>
+          </>
         }
       />
 
@@ -118,7 +149,7 @@ export function AnalysisScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (
                   title="No complete papers in this scope"
                   message={
                     scope === 'non-mcq'
-                      ? 'Written parts need a recorded score for every paper. Enter those scores on the desktop app, then reopen this tablet build to see the written-item analysis.'
+                      ? 'Written parts need a recorded score for every paper. Enter those scores in Scores, then come back to see the written-item analysis.'
                       : 'The analysis needs at least one complete checked sheet. Written parts must be scored before a mixed test can be compared as a whole.'
                   }
                 />

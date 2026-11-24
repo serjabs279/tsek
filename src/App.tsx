@@ -135,7 +135,7 @@ export default function App() {
           {view === 'settings' && <SettingsView />}
           {view === 'exams' && (
             <ExamList
-              onOpenExam={(id) => openExam(id)}
+              onOpenExam={(id, initialTab) => openExam(id, initialTab)}
               onNewExam={() => setNewExamOpen(true)}
             />
           )}

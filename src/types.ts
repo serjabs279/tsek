@@ -57,6 +57,12 @@ export type SectionType =
 /** Written parts are scored either one box per item or one total for the part. */
 export type SectionScoreMode = 'items' | 'part';
 
+/**
+ * How much room a written part needs on the printed written-answer page:
+ * one ruled line per item, or a block of lines for a long response.
+ */
+export type AnswerSpace = 'line' | 'block';
+
 export interface ExamSection {
   id: string;
   type: SectionType;
@@ -72,6 +78,11 @@ export interface ExamSection {
    * enumeration, identification, and essays. Missing means "items".
    */
   scoreMode?: SectionScoreMode;
+  /**
+   * Written parts only. Missing means the type default: one line for short
+   * answers, a block for essays.
+   */
+  answerSpace?: AnswerSpace;
 }
 
 export const SECTION_LABELS: Record<SectionType, { short: string; label: string; scannable: boolean; hint: string }> = {

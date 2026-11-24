@@ -19,6 +19,7 @@ import { COMFORTABLE_BUBBLE_MM, PAPER_SIZES, buildExamLayout, sheetCapacity } fr
 import {
   SECTION_TYPES,
   answerShape,
+  answerSpaceFor,
   buildExamWithSections,
   cleanSections,
   createSection,
@@ -53,6 +54,7 @@ function sectionShape(sections: ExamSection[]): string {
       section.choices ?? null,
       section.title ?? '',
       section.scoreMode ?? '',
+      section.answerSpace ?? '',
     ])
   );
 }
@@ -353,6 +355,20 @@ export function SetupTab({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: W
                               { value: 'part', label: 'Whole part' },
                             ]}
                             onChange={(value) => patchSection(section.id, { scoreMode: value })}
+                          />
+                        </label>
+                      )}
+                      {!scannable && (
+                        <label className="mini-field mini-field--mode">
+                          <span>Answer space</span>
+                          <Segmented
+                            size="sm"
+                            value={answerSpaceFor(section)}
+                            options={[
+                              { value: 'line', label: 'One line' },
+                              { value: 'block', label: 'Block' },
+                            ]}
+                            onChange={(value) => patchSection(section.id, { answerSpace: value })}
                           />
                         </label>
                       )}

@@ -112,7 +112,7 @@ export function KeyScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
       <ScreenHead
         eyebrow={`${exam.code} · Answer key`}
         title="Answer key"
-        subtitle="Only scanned parts need a key. Written parts are scored on the desktop app."
+        subtitle="Only scanned parts need a key. Written parts are scored in Scores."
         actions={
           <Badge tone={complete ? 'green' : scannable.length === 0 ? 'neutral' : 'amber'}>
             {complete ? <CheckCircle2 size={12} /> : null} {filled}/{scannable.length}
@@ -165,7 +165,7 @@ export function KeyScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
         {scannable.length === 0 ? (
           <div className="m-note m-note--warn">
             This test has no scanned parts, so there is no bubble key to fill. Every item is a
-            written part; enter those scores on the desktop app.
+            written part; enter those scores in Scores.
           </div>
         ) : (
           <section className="m-card">
@@ -232,7 +232,7 @@ export function KeyScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
               <div className="m-note" style={{ marginTop: 14 }}>
                 <strong>{filled} of {scannable.length} scanned items filled.</strong>{' '}
                 {complete
-                  ? 'The key is complete. Print the sheets from the desktop app, then scan them here.'
+                  ? 'The key is complete. Save the sheets as PDF from the Sheets tab, then scan them here.'
                   : 'Sheets can be printed before the key is complete, but every blank key item will score as wrong.'}
               </div>
               <button className="btn btn--soft btn--block" style={{ marginTop: 10 }} onClick={() => onNavigate('scan')}>
@@ -249,7 +249,7 @@ export function KeyScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
                 <h2>Written parts</h2>
                 <p>These add to each learner's total and to the item analysis.</p>
               </div>
-              <Badge tone="amber"><PenLine size={12} /> desktop</Badge>
+              <Badge tone="amber"><PenLine size={12} /> Scores</Badge>
             </div>
             <div className="m-card__body">
               {writtenGroups.map((group) => (
@@ -265,9 +265,12 @@ export function KeyScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (tab: 
                 </div>
               ))}
               <div className="m-note" style={{ marginTop: 10 }}>
-                Written scores are entered on the desktop app. Scanned scores still calculate and
-                print on this tablet; a scanned-only total is shown until the written part is filled in.
+                Written scores are typed in Scores. Scanned scores still calculate and save as PDF
+                on this tablet; a scanned-only total is shown until the written part is filled in.
               </div>
+              <button className="btn btn--soft btn--block" style={{ marginTop: 10 }} onClick={() => onNavigate('scores')}>
+                <PenLine size={15} /> Enter written scores
+              </button>
             </div>
           </section>
         )}

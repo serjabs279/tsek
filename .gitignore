@@ -15,6 +15,9 @@ dist-ssr
 # Compiled test bundles
 tests/.build
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Tauri build artifacts
 src-tauri/target
 src-tauri/gen
@@ -35,3 +38,12 @@ android/apk
 *.njsproj
 *.sln
 *.sw?
+
+# Android release signing (private, never commit)
+android/keys
+
+# Local QA scratch and session transcripts
+scratch/
+scan_history.txt
+search_out.txt
+user_scan_msgs.txt

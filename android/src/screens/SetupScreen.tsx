@@ -6,6 +6,7 @@ import {
   Copy,
   ListChecks,
   Plus,
+  Printer,
   ScanLine,
   Trash2,
   Users,
@@ -21,6 +22,7 @@ import { useApp } from '@shared/store/AppStore';
 import {
   SECTION_TYPES,
   answerShape,
+  answerSpaceFor,
   buildExamWithSections,
   cleanSections,
   createSection,
@@ -56,6 +58,7 @@ function sectionShape(sections: ExamSection[]): string {
       section.choices ?? null,
       section.title ?? '',
       section.scoreMode ?? '',
+      section.answerSpace ?? '',
     ])
   );
 }
@@ -144,9 +147,14 @@ export function SetupScreen({
         title={exam.title || 'Untitled exam'}
         subtitle={`${itemTotal} items · ${points(pointTotal)} points · ${scanned} scanned · ${written} written`}
         actions={
-          <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
-            <ScanLine size={15} /> Scan
-          </button>
+          <>
+            <button className="btn btn--soft btn--sm" onClick={() => onNavigate('sheets')}>
+              <Printer size={15} /> Sheets
+            </button>
+            <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
+              <ScanLine size={15} /> Scan
+            </button>
+          </>
         }
       />
 
@@ -226,7 +234,7 @@ export function SetupScreen({
           <div className="m-card__head">
             <div>
               <h2>Test structure</h2>
-              <p>Scanned parts print bubbles; written parts are scored on the desktop app.</p>
+              <p>Scanned parts print bubbles; written parts are typed in Scores.</p>
             </div>
             <Badge tone="accent">{points(pointTotal)} pts</Badge>
           </div>
@@ -330,6 +338,20 @@ export function SetupScreen({
                             </select>
                           </FieldBlock>
                         )}
+                        {!canScan && (
+                          <FieldBlock label="Answer space">
+                            <select
+                              className="select"
+                              value={answerSpaceFor(section)}
+                              onChange={(event) =>
+                                patchSection(section.id, { answerSpace: event.target.value === 'block' ? 'block' : 'line' })
+                              }
+                            >
+                              <option value="line">One line each</option>
+                              <option value="block">Block of lines</option>
+                            </select>
+                          </FieldBlock>
+                        )}
                       </div>
 
                       <div className="m-row m-row--between" style={{ marginTop: 8 }}>
@@ -399,7 +421,7 @@ export function SetupScreen({
           <div className="m-card__head">
             <div>
               <h2>Sheet layout</h2>
-              <p>Keep this identical to the sheets printed from the desktop app.</p>
+              <p>Keep this identical to the sheets saved from the Sheets tab.</p>
             </div>
           </div>
           <div className="m-card__body">
@@ -448,7 +470,7 @@ export function SetupScreen({
             </div>
             <div className="m-note" style={{ marginTop: 12 }}>
               Changing paper, orientation, or sheets per page changes where the scanner looks for
-              bubbles. Reprint the sheets on the desktop app after any change here.
+              bubbles. Save fresh sheets from the Sheets tab after any change here.
             </div>
           </div>
         </section>
@@ -457,7 +479,7 @@ export function SetupScreen({
           <div className="m-card__head">
             <div>
               <h2>Next steps</h2>
-              <p>The tablet does the roster, key, scanning, results, and analysis.</p>
+              <p>This tablet handles the roster, key, sheets, scanning, scores, and analysis.</p>
             </div>
           </div>
           <div className="m-card__body">
@@ -475,6 +497,14 @@ export function SetupScreen({
                 <span style={{ flex: 1 }}>
                   <strong>{keyFilled === exam.itemCount ? 'Review the answer key' : 'Fill in the answer key'}</strong>
                   <span>{keyFilled} of {exam.itemCount} scanned items filled</span>
+                </span>
+                <ArrowRight size={16} />
+              </button>
+              <button className="m-bigbtn" onClick={() => onNavigate('sheets')}>
+                <span className="m-bigbtn__icon"><Printer size={19} /></span>
+                <span style={{ flex: 1 }}>
+                  <strong>Save the answer sheets</strong>
+                  <span>PDF saved wherever you choose</span>
                 </span>
                 <ArrowRight size={16} />
               </button>
@@ -516,9 +546,9 @@ export function SetupScreen({
         </section>
 
         <div className="m-note">
-          <strong>Printing and exports are desktop-only.</strong> Generate the PDF answer sheets,
-          class reports, and CSV files from the Windows app. This tablet build keeps a snapshot
-          before destructive changes, but restore is also on desktop.
+          <strong>Sheets and reports save as PDF on the tablet.</strong> Open Sheets to save the
+          answer pages, then print them from Files or Drive. The workspace backup file moves
+          between this tablet and the desktop app — export it from Settings.
         </div>
       </div>
 

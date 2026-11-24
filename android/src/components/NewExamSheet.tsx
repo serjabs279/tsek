@@ -149,8 +149,9 @@ export function NewExamSheet({
         </FieldBlock>
       </div>
       <div className="m-note" style={{ marginTop: 14 }}>
-        The sheet prints with a QR of the exam code and each learner's LRN. Scanning reads that QR,
-        so sheets must be printed from the desktop app after the roster and key are ready.
+        The sheet carries a QR of the exam code and each learner's LRN. Scanning reads that QR, so
+        save the sheets from the Sheets tab once the roster and key are ready — the save dialog
+        asks where the PDF goes.
       </div>
     </MobileSheet>
   );

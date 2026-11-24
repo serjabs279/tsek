@@ -341,8 +341,17 @@ export function downloadResultsCsv(state: AppState, exam: Exam): void {
   downloadText(buildResultsCsv(exam, state), `${examFileStem(exam)}_results.csv`, 'text/csv');
 }
 
-export function downloadWorkspace(state: AppState): void {
-  downloadJson(
+export function workspaceBackupFilename(date = new Date()): string {
+  return `Tsek_workspace_${date.toISOString().slice(0, 10)}.json`;
+}
+
+/**
+ * The full workspace as one JSON document. Kept as a plain string so the
+ * Android shell can hand it to a file dialog without going through a browser
+ * download.
+ */
+export function buildWorkspaceBackup(state: AppState): string {
+  return JSON.stringify(
     {
       version: '1.0',
       exportType: 'SRPHS_TSEK_WORKSPACE',
@@ -350,8 +359,13 @@ export function downloadWorkspace(state: AppState): void {
       app: APP_TAG,
       state,
     },
-    `Tsek_workspace_${new Date().toISOString().slice(0, 10)}.json`
+    null,
+    2
   );
+}
+
+export function downloadWorkspace(state: AppState): void {
+  downloadText(buildWorkspaceBackup(state), workspaceBackupFilename(), 'application/json');
 }
 
 export function downloadRoster(exam: Exam, learners: Learner[]): void {

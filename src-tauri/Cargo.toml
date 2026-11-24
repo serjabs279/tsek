@@ -1,6 +1,6 @@
 [package]
 name = "tsek"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tsek — local-first answer-sheet generator and exam checker"
 authors = ["Richmond C. Jabla"]
 edition = "2021"

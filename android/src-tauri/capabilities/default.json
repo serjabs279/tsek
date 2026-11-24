@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Core permissions for the Tsek Android shell.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-write-file"
+  ]
 }

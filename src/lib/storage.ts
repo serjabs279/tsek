@@ -70,3 +70,21 @@ export function validateImportedState(value: unknown): value is AppState {
     Array.isArray(candidate.results)
   );
 }
+
+/**
+ * Read a backup file written by `buildWorkspaceBackup`. Accepts both the
+ * wrapped `{ state }` envelope and a bare state object. Returns null for
+ * anything that is not a complete workspace.
+ */
+export function parseWorkspaceBackup(raw: string): AppState | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const candidate =
+      parsed && typeof parsed === 'object' && 'state' in (parsed as Record<string, unknown>)
+        ? (parsed as { state: unknown }).state
+        : parsed;
+    return validateImportedState(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}

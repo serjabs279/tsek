@@ -4,7 +4,9 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
+  FileDown,
   PencilLine,
+  PenLine,
   ScanLine,
   Table2,
   Trash2,
@@ -14,8 +16,10 @@ import { useApp } from '@shared/store/AppStore';
 import { materializeItems } from '@shared/lib/sections';
 import { recalculateResult, resolveFlag, summarize } from '@shared/lib/results';
 import { scoreResult } from '@shared/lib/scoring';
-import { Badge } from '@shared/components/ui';
+import { buildResultsPdf, reportFilename } from '@shared/lib/reportPdf';
+import { Badge, Spinner } from '@shared/components/ui';
 import { EmptyBlock, MobileSheet, ScreenHead, StatTile, TypeToConfirm } from '../components/Common';
+import { savePdf } from '../lib/savePdf';
 import type { ExamTab } from '../MobileApp';
 
 function flagLabel(flag: ItemFlag): string {
@@ -45,6 +49,22 @@ export function ResultsScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (t
   const [dirty, setDirty] = useState(false);
   const [onlyReview, setOnlyReview] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const saveReport = async () => {
+    if (results.length === 0) return;
+    setPdfBusy(true);
+    try {
+      const bytes = await buildResultsPdf(exam, learners, results, state.settings);
+      if (await savePdf(bytes, reportFilename('Results', exam))) {
+        toast('Results report saved as PDF.', 'success');
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'The PDF could not be generated.', 'danger');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const visible = useMemo(
     () => (onlyReview ? results.filter((result) => result.needsReview) : results),
@@ -125,9 +145,14 @@ export function ResultsScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (t
         title="Checked sheets"
         subtitle={`${results.length} of ${learners.length} learners checked · ${summary.reviewCount} need review`}
         actions={
-          <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
-            <ScanLine size={15} /> Scan
-          </button>
+          <>
+            <button className="btn btn--soft btn--sm" onClick={() => void saveReport()} disabled={pdfBusy || results.length === 0}>
+              {pdfBusy ? <Spinner size={14} /> : <FileDown size={15} />} PDF
+            </button>
+            <button className="btn btn--primary btn--sm" onClick={() => onNavigate('scan')}>
+              <ScanLine size={15} /> Scan
+            </button>
+          </>
         }
       />
 
@@ -162,8 +187,11 @@ export function ResultsScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (t
           {summary.incompleteCount > 0 && (
             <div className="m-note m-note--warn">
               <strong>{summary.incompleteCount} sheet{summary.incompleteCount === 1 ? '' : 's'} missing written scores.</strong>{' '}
-              The class average counts only complete papers. Written parts are scored on the desktop app;
-              scanned scores still calculate here.
+              The class average counts only complete papers. Written parts are typed in Scores;
+              scanned scores still calculate here.{' '}
+              <button className="btn btn--soft btn--sm" style={{ marginLeft: 8 }} onClick={() => onNavigate('scores')}>
+                <PenLine size={13} /> Enter scores
+              </button>
             </div>
           )}
 
@@ -382,7 +410,7 @@ export function ResultsScreen({ exam, onNavigate }: { exam: Exam; onNavigate: (t
               <div className="m-note" style={{ marginTop: 12 }}>
                 <strong>{writtenItems.length} written item{writtenItems.length === 1 ? '' : 's'} on this test.</strong>{' '}
                 {detailScore.manualScored > 0
-                  ? `${detailScore.manualScored} score${detailScore.manualScored === 1 ? '' : 's'} already entered on desktop; `
+                  ? `${detailScore.manualScored} score${detailScore.manualScored === 1 ? '' : 's'} already entered in Scores; `
                   : 'No written scores are recorded yet; '}
                 the percentage above is out of the full test. Save corrections here only affects the scanned answers.
               </div>

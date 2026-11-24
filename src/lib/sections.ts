@@ -1,4 +1,4 @@
-import type { Exam, ExamSection, SectionType } from '../types';
+import type { AnswerSpace, Exam, ExamSection, SectionType } from '../types';
 import { SECTION_LABELS } from '../types';
 import { uid } from './id';
 
@@ -39,6 +39,22 @@ export function partScoreKey(sectionId: string): string {
 
 export function sectionLabel(section: ExamSection): string {
   return section.title?.trim() || SECTION_LABELS[section.type].label;
+}
+
+/**
+ * The printed room a written part needs. Essays default to a block; every
+ * other written type gets one ruled line per item. A teacher can override
+ * either default in Setup.
+ */
+export function answerSpaceFor(section: ExamSection): AnswerSpace {
+  if (isScannable(section.type)) return 'line';
+  if (section.answerSpace === 'block' || section.answerSpace === 'line') return section.answerSpace;
+  return section.type === 'ESSAY' ? 'block' : 'line';
+}
+
+/** The written parts in printed order, skipping empty ones. */
+export function writtenSections(exam: Exam): ExamSection[] {
+  return examSections(exam).filter((section) => !isScannable(section.type) && section.itemCount > 0);
 }
 
 export function sectionChoices(section: ExamSection): string[] {
@@ -278,6 +294,11 @@ export function cleanSections(sections: ExamSection[]): ExamSection[] {
         : section.scoreMode === 'part'
           ? ('part' as const)
           : ('items' as const),
+      answerSpace: isScannable(section.type)
+        ? undefined
+        : section.answerSpace === 'block' || section.answerSpace === 'line'
+          ? section.answerSpace
+          : undefined,
     }));
   if (cleaned.length === 0) return [createSection('MCQ')];
   return cleaned;

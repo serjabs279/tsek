@@ -137,6 +137,10 @@ fn snapshot_prune(app: tauri::AppHandle, keep: usize) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Save/open dialogs for workspace backups. The fs plugin reads and
+        // writes the picked file, including Android content:// URIs.
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             storage_load,
             storage_save,

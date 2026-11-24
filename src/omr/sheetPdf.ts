@@ -2,6 +2,9 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf
 import type { Exam, Learner } from '../types';
 import { MM_TO_PT, buildExamLayout, markerRect, pageSize, type SheetLayout } from './layout';
 import { makeQrDataUrl, makeSheetQrPayload } from './qr';
+import { planWrittenSheets, writtenPanelGeometry } from '../lib/written';
+import { drawWrittenContent, type WrittenFonts } from './writtenPdf';
+import { downloadBlob } from '../lib/download';
 
 export interface SheetPdfOptions {
   includeQr: boolean;
@@ -48,6 +51,35 @@ export async function buildSingleSheetPdf(
   return buildPdf(exam, [learner], options, true);
 }
 
+interface PdfAssets {
+  regular: PDFFont;
+  bold: PDFFont;
+  qrImages: Map<string, Awaited<ReturnType<PDFDocument['embedPng']>>>;
+}
+
+async function prepareAssets(
+  pdf: PDFDocument,
+  exam: Exam,
+  learners: Learner[],
+  options: SheetPdfOptions
+): Promise<PdfAssets> {
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const qrImages: PdfAssets['qrImages'] = new Map();
+  if (options.includeQr) {
+    const unique = Array.from(new Set(learners.map((learner) => learner.lrn)));
+    await Promise.all(
+      unique.map(async (lrn) => {
+        const payload = makeSheetQrPayload(exam.code, lrn);
+        const dataUrl = await makeQrDataUrl(payload);
+        const image = await pdf.embedPng(dataUrlToBytes(dataUrl));
+        qrImages.set(lrn, image);
+      })
+    );
+  }
+  return { regular, bold, qrImages };
+}
+
 async function buildPdf(
   exam: Exam,
   learners: Learner[],
@@ -64,21 +96,7 @@ async function buildPdf(
   pdf.setAuthor('Tsek · Exam Checker');
   pdf.setSubject(`${exam.subject} · ${exam.section}`);
 
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-  const qrImages = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>();
-  if (options.includeQr) {
-    const unique = Array.from(new Set(learners.map((learner) => learner.lrn)));
-    await Promise.all(
-      unique.map(async (lrn) => {
-        const payload = makeSheetQrPayload(exam.code, lrn);
-        const dataUrl = await makeQrDataUrl(payload);
-        const image = await pdf.embedPng(dataUrlToBytes(dataUrl));
-        qrImages.set(lrn, image);
-      })
-    );
-  }
+  const { regular, bold, qrImages } = await prepareAssets(pdf, exam, learners, options);
 
   const sideBySide = pageWidth > pageHeight;
   const slots = Math.max(1, perPage);
@@ -355,6 +373,98 @@ function drawSheet({
   });
 }
 
+/**
+ * Mixed tests print one folio page per learner: the bubble sheet takes the
+ * half that usually holds the second learner, and the written answer panel
+ * takes the other half. Written answers that need more room continue on full
+ * portrait pages right after that learner's folio page.
+ */
+export async function buildCombinedSheetsPdf(
+  exam: Exam,
+  learners: Learner[],
+  options: SheetPdfOptions
+): Promise<Uint8Array> {
+  // The written panel always takes the second half of a two-up print, so the
+  // bubble sheet is laid out at the two-up size even if the exam is set to one
+  // sheet per page. The Sheets tab only offers this mode for two-up exams.
+  const sheetExam: Exam = exam.sheetsPerPage === 2 ? exam : { ...exam, sheetsPerPage: 2 };
+  const layout = buildExamLayout(sheetExam);
+  const page = pageSize(exam.paper, exam.orientation);
+  const sideBySide = page.width >= page.height;
+  const panel = writtenPanelGeometry(exam.paper, exam.orientation);
+  const plan = planWrittenSheets(exam, exam.paper, panel);
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(`${exam.title} — answer sheets and written answers`);
+  pdf.setAuthor('Tsek · Exam Checker');
+  pdf.setSubject(`${exam.subject} · ${exam.section} · combined sheet`);
+
+  const { regular, bold, qrImages } = await prepareAssets(pdf, exam, learners, options);
+  const writtenFonts: WrittenFonts = { regular, bold };
+
+  learners.forEach((learner, index) => {
+    const folio = pdf.addPage([page.width * MM_TO_PT, page.height * MM_TO_PT]);
+
+    if (plan.pages.length > 0) {
+      drawWrittenContent({
+        page: folio,
+        exam,
+        learner,
+        pagePlan: plan.pages[0],
+        totalPages: plan.pages.length,
+        pageNumber: 1,
+        fonts: writtenFonts,
+        options: { schoolName: options.schoolName },
+      });
+    }
+
+    drawSheet({
+      page: folio,
+      exam,
+      learner,
+      index,
+      total: learners.length,
+      layout,
+      regular,
+      bold,
+      options,
+      qrImage: qrImages.get(learner.lrn),
+      // The bubble sheet keeps the right half on a landscape page, or the
+      // bottom half on a portrait page, exactly where the second learner
+      // would have been.
+      offsetX: sideBySide ? layout.width : 0,
+      offsetY: sideBySide ? 0 : layout.height,
+    });
+
+    for (let pageIndex = 1; pageIndex < plan.pages.length; pageIndex += 1) {
+      const pagePlan = plan.pages[pageIndex];
+      const continuation = pdf.addPage([
+        pagePlan.geometry.width * MM_TO_PT,
+        pagePlan.geometry.height * MM_TO_PT,
+      ]);
+      drawWrittenContent({
+        page: continuation,
+        exam,
+        learner,
+        pagePlan,
+        totalPages: plan.pages.length,
+        pageNumber: pageIndex + 1,
+        fonts: writtenFonts,
+        options: { schoolName: options.schoolName },
+      });
+    }
+  });
+
+  return pdf.save();
+}
+
+export async function buildCombinedSheetPdf(
+  exam: Exam,
+  learner: Learner,
+  options: SheetPdfOptions
+): Promise<Uint8Array> {
+  return buildCombinedSheetsPdf(exam, [learner], options);
+}
+
 export async function downloadSheetsPdf(
   exam: Exam,
   learners: Learner[],
@@ -362,13 +472,5 @@ export async function downloadSheetsPdf(
   filename: string
 ): Promise<void> {
   const bytes = await buildSheetsPdf(exam, learners, options);
-  const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(new Blob([bytes as BlobPart], { type: 'application/pdf' }), filename);
 }
