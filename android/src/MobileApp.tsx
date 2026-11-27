@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
+  ClipboardList,
+  Download,
   FileText,
   ListChecks,
   PenLine,
@@ -22,6 +24,8 @@ import { ScanScreen } from './screens/ScanScreen';
 import { ScoresScreen } from './screens/ScoresScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
+import { TosScreen } from './screens/TosScreen';
+import { ExportScreen } from './screens/ExportScreen';
 import { NewExamSheet } from './components/NewExamSheet';
 import { totalItemCount } from '@shared/lib/sections';
 
@@ -29,22 +33,26 @@ export type ExamTab =
   | 'setup'
   | 'roster'
   | 'key'
+  | 'tos'
   | 'sheets'
   | 'scan'
   | 'scores'
   | 'results'
-  | 'analysis';
+  | 'analysis'
+  | 'export';
 type View = 'home' | 'exam' | 'settings';
 
 const TABS: Array<{ id: ExamTab; label: string; icon: typeof ScanLine }> = [
   { id: 'setup', label: 'Setup', icon: Settings2 },
   { id: 'roster', label: 'Roster', icon: Users },
   { id: 'key', label: 'Key', icon: ListChecks },
+  { id: 'tos', label: 'TOS', icon: ClipboardList },
   { id: 'sheets', label: 'Sheets', icon: FileText },
   { id: 'scan', label: 'Scan', icon: ScanLine },
   { id: 'scores', label: 'Scores', icon: PenLine },
   { id: 'results', label: 'Results', icon: Table2 },
   { id: 'analysis', label: 'Analysis', icon: BarChart3 },
+  { id: 'export', label: 'Export', icon: Download },
 ];
 
 export function MobileApp() {
@@ -132,11 +140,13 @@ export function MobileApp() {
             {tab === 'setup' && <SetupScreen exam={activeExam} onNavigate={openTab} onDeleted={goHome} />}
             {tab === 'roster' && <RosterScreen exam={activeExam} />}
             {tab === 'key' && <KeyScreen exam={activeExam} onNavigate={openTab} />}
+            {tab === 'tos' && <TosScreen exam={activeExam} />}
             {tab === 'sheets' && <SheetsScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'scan' && <ScanScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'scores' && <ScoresScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'results' && <ResultsScreen exam={activeExam} onNavigate={openTab} />}
             {tab === 'analysis' && <AnalysisScreen exam={activeExam} onNavigate={openTab} />}
+            {tab === 'export' && <ExportScreen exam={activeExam} onNavigate={openTab} />}
           </>
         )}
       </main>

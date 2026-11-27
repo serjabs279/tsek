@@ -1,5 +1,43 @@
 # Tsek release notes
 
+## Version 0.3.0 (Android) · 27 November 2026
+
+The tablet now covers the two remaining jobs that used to send a teacher back
+to a PC: building the Table of Specifications and handing the results to the
+GradeApp. The desktop build is unchanged at 0.2.0.
+
+### New in this build
+
+- **TOS tab.** Build the Table of Specifications on the tablet: plan details,
+  Bloom weights with the 30/20/20/10/10/10 reset, topics with competencies,
+  time and test type, and item counts per level. Distribute all Setup items in
+  one tap; the POI lines renumber as counts change. Saves a DepEd-format TOS
+  PDF through Android's save picker, plus a CSV for spreadsheets.
+- **Export tab.** GradeApp assessment scores JSON, the full Tsek results
+  archive, and the class results CSV. Each file is built on the tablet and
+  saved where the teacher chooses. A full-screen JSON preview with copy is
+  included.
+- **Legacy subject grades JSON.** The old single-assessment quarter file is
+  still available behind an `OVERWRITE` typed confirmation, with the same
+  warning as the desktop app.
+- **Safe overwrites.** Clear items, re-distribute over existing counts, and
+  topic deletion each require the exact phrase typed.
+
+### Verified
+
+- TypeScript clean on Android and desktop; Android production bundle builds;
+  shared tests pass 18/18.
+- Browser pass: TOS created and distributed 61/61 items with correct POI
+  ranges and survived a reload; TOS PDF and CSV saved under the right names;
+  all four export files saved, and the assessment preview parsed with the full
+  roster and results.
+
+Known limits for 0.3.0: JSON/CSV saving on a physical tablet uses the same
+Android picker and `writeTextFile` path as backups and sheet PDFs, but has
+only been exercised in the browser build so far.
+
+---
+
 ## Version 0.2.0 · 24 November 2026
 
 Tsek for Android is no longer a companion to the desktop app. It runs the same
